@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Secrets / environment
+.env
+.env.local
+.env.*.local
+*/.env
+**/.env
+
+# Build output
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# Uploaded media (runtime data, not source)
+admin/backend/public/uploads/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+ppw-run.log
+ppw-err.log
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Vite / cache
+.vite/
+.cache/
+
+# Capacitor / Android build artifacts
+android/app/build/
+android/.gradle/
+android/build/

@@ -1,0 +1,5 @@
+SET FOREIGN_KEY_CHECKS = 0;
+TRUNCATE TABLE order_detail;
+TRUNCATE TABLE `order`;
+DELETE FROM user WHERE username NOT IN ('admin');
+SET FOREIGN_KEY_CHECKS = 1;
