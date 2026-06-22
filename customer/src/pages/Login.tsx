@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, type KeyboardEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Mail, Phone, ArrowLeft, CheckCircle, RefreshCw, User, ShoppingBag } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import api from '../api';
@@ -10,7 +10,11 @@ interface SignUpData { name: string; email: string; phone: string; shopName: str
 
 export default function AuthPage() {
   const { login } = useAuth();
-  const navigate = useNavigate(); // used after login/signup to redirect home
+  const navigate = useNavigate(); // used after login/signup to redirect back
+  const location = useLocation();
+  // Where to send the user after a successful login. ProtectedRoute stashes the
+  // page they were trying to reach (e.g. /checkout) in location.state.from.
+  const redirectTo = (location.state as any)?.from || '/';
 
   const [mode, setMode]     = useState<Mode>('signin');
   const [animKey, setAnimKey] = useState(0);
@@ -122,7 +126,7 @@ export default function AuthPage() {
           shopName: customer.shop_no || su.shopName || '',
         });
       }
-      navigate('/', { state: { justLoggedIn: true } });
+      navigate(redirectTo, { replace: true, state: { justLoggedIn: true } });
     } catch (err: any) {
       const status = err?.response?.status;
       const raw = err?.response?.data?.message;

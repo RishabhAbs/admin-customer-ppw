@@ -1,5 +1,7 @@
-import { BrowserRouter, Routes, Route, Outlet, Navigate } from 'react-router-dom';
+import { useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Outlet, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { enableContentProtection } from './utils/contentProtection';
 import { CartProvider } from './context/CartContext';
 import { OrderProvider } from './context/OrderContext';
 import Navbar from './components/Navbar';
@@ -28,21 +30,37 @@ function MainLayout() {
   );
 }
 
+// Public pages (browse the catalogue, view a shared product link, build a cart)
+// — no login needed. Login is only enforced at checkout (see ProtectedRoute).
+function PublicLayout() {
+  return <MainLayout />;
+}
+
 function ProtectedRoute() {
   const { isLoggedIn, loading } = useAuth();
+  const location = useLocation();
   if (loading) return null;
-  if (!isLoggedIn) return <Navigate to="/login" replace />;
+  // Remember where the user was headed so login can send them back there.
+  if (!isLoggedIn) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
   return <MainLayout />;
 }
 
 function GuestRoute({ children }: { children: React.ReactNode }) {
   const { isLoggedIn, loading } = useAuth();
+  const location = useLocation();
   if (loading) return null;
-  if (isLoggedIn) return <Navigate to="/" replace />;
+  // Preserve any redirect target carried in from ProtectedRoute.
+  if (isLoggedIn) return <Navigate to={(location.state as any)?.from || '/'} replace />;
   return <>{children}</>;
 }
 
 export default function App() {
+  // Block image-saving gestures (web) + screenshots (Android via FLAG_SECURE).
+  useEffect(() => {
+    const cleanup = enableContentProtection();
+    return cleanup;
+  }, []);
+
   return (
     <BrowserRouter>
       <AuthProvider>
@@ -50,12 +68,16 @@ export default function App() {
           <OrderProvider>
           <ScrollToTop />
           <Routes>
-            {/* Protected: requires login */}
-            <Route element={<ProtectedRoute />}>
+            {/* Public: browse freely, including shared product links. No login. */}
+            <Route element={<PublicLayout />}>
               <Route path="/" element={<Home />} />
               <Route path="/products" element={<Products />} />
               <Route path="/products/:id" element={<ProductDetail />} />
               <Route path="/cart" element={<Cart />} />
+            </Route>
+
+            {/* Protected: login required — checkout and account pages. */}
+            <Route element={<ProtectedRoute />}>
               <Route path="/checkout" element={<Checkout />} />
               <Route path="/orders" element={<Orders />} />
               <Route path="/profile" element={<Profile />} />

@@ -22,6 +22,9 @@ export class OrderDetail {
   @Column({ nullable: true })
   item_name: string;
 
+  @Column({ nullable: true })
+  barcode: string;
+
   @Column({ type: 'decimal', precision: 10, scale: 2 })
   rate: number;
 

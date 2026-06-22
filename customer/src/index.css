@@ -113,6 +113,17 @@ body {
   }
 }
 
+/* ── Content protection ──────────────────────────────────────────────────
+   Deter image saving: kill the iOS/Android long-press "Save Image" callout,
+   block image selection/highlight, and stop drag-out. Screenshots can't be
+   blocked on the web (only in the native Android app via FLAG_SECURE). */
+img {
+  -webkit-touch-callout: none;   /* iOS long-press save menu */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-user-drag: none;       /* block drag-out to desktop/other apps */
+}
+
 .slide-in-left {
   animation: slideInLeft 0.3s ease-out both;
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Loader, Search, FileText, Calendar, ArrowRight, Trash2, LogOut, X, User as UserIcon, ChevronDown } from 'lucide-react';
-import { getOrders, deleteOrder, syncOrderToTally, getUser } from '../api';
+import { Loader, Search, FileText, Calendar, ArrowRight, Trash2, LogOut, X, User as UserIcon, ChevronDown, Download } from 'lucide-react';
+import { getOrders, deleteOrder, syncOrderToTally, getUser, exportOrdersExcel } from '../api';
 
 const copper = '#b8804a';
 const copperDark = '#9a6a3c';
@@ -48,6 +48,27 @@ export default function OrderReport() {
     });
     const [activeFilter, setActiveFilter] = useState({ value: '', category: 'all' });
     const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, totalPages: 0 });
+    const [exporting, setExporting] = useState(false);
+
+    const handleExport = async () => {
+        if (exporting) return;
+        setExporting(true);
+        try {
+            await exportOrdersExcel(
+                searchTerm,
+                activeFilter.category === 'type' ? activeFilter.value : '',
+                userId ? parseInt(userId) : undefined,
+                searchParams.get('range') === 'fy' ? '' : selectedDate,
+                searchParams.get('range') || '',
+                activeFilter.category === 'status' ? activeFilter.value : ''
+            );
+        } catch (error) {
+            console.error('Failed to export orders', error);
+            alert('Failed to export Excel. Please try again.');
+        } finally {
+            setExporting(false);
+        }
+    };
 
     const fetchOrders = async (page = 1, search = '', filter = activeFilter, date = selectedDate) => {
         setLoading(true);
@@ -180,10 +201,10 @@ export default function OrderReport() {
                 </div>
 
                 {/* Row 2: Filter + Date + Count */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                     <div className="relative flex-shrink-0">
                         <select
-                            className="appearance-none text-[11px] font-black pl-3 pr-8 py-2 rounded-xl outline-none uppercase tracking-tight"
+                            className="appearance-none text-[11px] font-black pl-2 pr-6 py-2 rounded-xl outline-none uppercase tracking-tight"
                             style={{
                                 background: 'rgba(184,128,74,0.08)',
                                 border: '1px solid rgba(184,128,74,0.2)',
@@ -205,35 +226,22 @@ export default function OrderReport() {
                                 </option>
                             ))}
                         </select>
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: copper }}>
+                        <div className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: copper }}>
                             <ChevronDown size={14} />
                         </div>
                     </div>
 
                     {isAdmin && (
                         <div
-                            className="flex items-center rounded-xl px-2 py-1.5 gap-2 flex-1 min-w-0"
-                            style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(184,128,74,0.15)' }}
+                            className="flex items-center rounded-xl px-2 py-1.5 gap-1.5 flex-1"
+                            style={{ background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(184,128,74,0.15)', minWidth: '180px' }}
                         >
-                            <button
-                                onClick={() => {
-                                    const d = new Date();
-                                    const istOffset = 5.5 * 60 * 60 * 1000;
-                                    const istTime = new Date(d.getTime() + istOffset);
-                                    const today = `${istTime.getUTCFullYear()}-${String(istTime.getUTCMonth() + 1).padStart(2, '0')}-${String(istTime.getUTCDate()).padStart(2, '0')}`;
-                                    updateDate(today);
-                                }}
-                                className="text-[10px] font-black px-2 py-1 rounded-lg uppercase flex-shrink-0 transition-colors"
-                                style={{ color: copper, background: 'rgba(184,128,74,0.1)', border: '1px solid rgba(184,128,74,0.2)' }}
-                            >
-                                Today
-                            </button>
-                            <label className="flex items-center flex-1 min-w-0 pr-1 gap-1.5 cursor-pointer relative overflow-hidden">
-                                <Calendar size={14} style={{ color: '#8d5838', opacity: 0.8 }} className="flex-shrink-0" />
+                            <label className="flex items-center flex-1 min-w-0 pr-1 gap-1 cursor-pointer relative">
+                                <Calendar size={13} style={{ color: '#8d5838', opacity: 0.8 }} className="flex-shrink-0" />
                                 <input
                                     type="date"
-                                    className="bg-transparent text-[12px] font-bold outline-none w-full cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
-                                    style={{ color: '#2c1e0f' }}
+                                    className="bg-transparent text-[12px] font-bold outline-none flex-1 min-w-0 cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                                    style={{ color: '#2c1e0f', minWidth: '104px' }}
                                     value={selectedDate}
                                     onChange={(e) => updateDate(e.target.value)}
                                 />
@@ -251,12 +259,22 @@ export default function OrderReport() {
                     )}
 
                     <div
-                        className="rounded-xl flex-shrink-0 flex items-center gap-1.5 px-3 py-2"
+                        className="rounded-xl flex-shrink-0 flex items-center gap-1 px-2 py-2"
                         style={{ background: '#2c1e0f', boxShadow: '0 2px 8px rgba(44,30,15,0.2)' }}
                     >
                         <span className="text-sm font-black tracking-tighter text-white">{pagination.total}</span>
                         <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.5)' }}>Bills</span>
                     </div>
+
+                    <button
+                        onClick={handleExport}
+                        disabled={exporting || pagination.total === 0}
+                        title="Download Excel of these orders with all item details"
+                        className="w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center transition-all active:scale-90 disabled:opacity-50"
+                        style={{ background: `linear-gradient(145deg, ${copper}, ${copperDark})`, boxShadow: '0 2px 8px rgba(184,128,74,0.25)', color: '#fff' }}
+                    >
+                        {exporting ? <Loader size={16} className="animate-spin" /> : <Download size={16} />}
+                    </button>
                 </div>
 
                 {/* Row 3: Search */}

@@ -266,7 +266,6 @@ export default function ProductDetail() {
    ────────────────────────────────────────────────────────────────────────── */
 type GalleryMedia = { id: number; type: 'image' | 'video'; url: string };
 
-const AUTO_MS = 3000;
 
 function MediaGallery({ media, alt }: { media: GalleryMedia[]; alt: string }) {
   const trackRef = useRef<HTMLDivElement | null>(null);
@@ -305,16 +304,8 @@ function MediaGallery({ media, alt }: { media: GalleryMedia[]; alt: string }) {
     }
   };
 
-  // Auto-advance every 3s — paused while a video plays, while the lightbox is
-  // open, or briefly after the user interacts.
-  useEffect(() => {
-    if (media.length < 2) return;
-    const t = setInterval(() => {
-      if (fullscreen || videoPlaying.current || Date.now() < pausedUntil.current) return;
-      scrollToIndex((activeRef.current + 1) % media.length);
-    }, AUTO_MS);
-    return () => clearInterval(t);
-  }, [media.length, fullscreen]);
+  // Auto-advance disabled — images change only via manual thumbnail selection
+  // or swipe.
 
   // When the lightbox opens, pause the big-box video so its audio doesn't keep
   // playing behind the overlay. When it closes, give the user a beat before
@@ -468,17 +459,7 @@ function MediaLightbox({ media, startIndex, alt, onClose, onIndexChange }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Same 3s auto-advance as the big box: loops, pauses while a video plays or
-  // just after the user swipes, and advances when a played video ends.
-  useEffect(() => {
-    if (media.length < 2) return;
-    const t = setInterval(() => {
-      if (videoPlaying.current || Date.now() < pausedUntil.current) return;
-      scrollToIndex((indexRef.current + 1) % media.length);
-    }, AUTO_MS);
-    return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [media.length]);
+  // Auto-advance disabled — images change only via manual swipe/selection.
 
   const handleScroll = () => {
     const el = trackRef.current;

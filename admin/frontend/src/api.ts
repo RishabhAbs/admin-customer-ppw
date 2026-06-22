@@ -101,6 +101,37 @@ export const getOrders = async (page = 1, limit = 50, search = '', orderType = '
     return response.data;
 };
 
+// Download the orders+items Excel for the current Day Book filters.
+// Uses the same params as getOrders so the file matches what's on screen.
+export const exportOrdersExcel = async (
+    search = '', orderType = '', userIdOverride?: number, date?: string, range?: string, status = '', source = ''
+) => {
+    const user = getUser();
+    const response = await api.get('/reports/orders/export', {
+        responseType: 'blob',
+        params: {
+            search,
+            user_id: userIdOverride || ((user.role === 'admin' || (user.permissions || []).includes('orders') || (user.permissions || []).includes('reports')) ? undefined : user.id),
+            role: user.role,
+            show_all: 'true',
+            order_type: orderType || undefined,
+            date: date || undefined,
+            range: range || undefined,
+            status: status || undefined,
+            source: source || undefined,
+        },
+    });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const a = document.createElement('a');
+    a.href = url;
+    const stamp = new Date().toISOString().slice(0, 10);
+    a.download = `orders-export-${stamp}.xls`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+};
+
 export const getOrderById = async (id: number) => {
     const response = await api.get(`/orders/${id}`);
     return response.data;

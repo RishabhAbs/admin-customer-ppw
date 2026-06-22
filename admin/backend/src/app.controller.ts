@@ -13,7 +13,9 @@ import {
   UnauthorizedException,
   UseGuards,
   Headers,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { AppService } from './app.service';
 import { AuthService } from './auth/auth.service';
 import { TallyService } from './tally.service';
@@ -1288,6 +1290,215 @@ export class AppController {
       console.error('Error in getOrders:', error);
       throw error;
     }
+  }
+
+  // Excel export of orders + their line items (one row per item).
+  // Reuses the exact same filters as GET reports/orders so the file matches
+  // whatever the Day Book is currently showing (date/search/status/etc.).
+  // Emits SpreadsheetML XML (.xls) — Excel opens it natively, no extra deps.
+  @UseGuards(AuthGuard('jwt'), PermissionsGuard)
+  @RequirePermission('orders', 'reports')
+  @Get('reports/orders/export')
+  async exportOrders(
+    @Res() res: Response,
+    @Query('search') search: string = '',
+    @Query('user_id') userId: string = '',
+    @Query('role') role: string = '',
+    @Query('show_all') showAll: string = 'false',
+    @Query('date') date: string = '',
+    @Query('order_type') orderType: string = '',
+    @Query('range') range: string = '',
+    @Query('status') status: string = '',
+    @Query('source') source: string = '',
+    @Request() req: any = {},
+  ) {
+    const query = this.orderRepo
+      .createQueryBuilder('order')
+      .leftJoinAndSelect('order.ledger', 'ledger')
+      .leftJoinAndSelect('order.creator', 'creator')
+      .leftJoinAndSelect('order.processor', 'processor')
+      .leftJoinAndSelect('order.orderDetails', 'detail')
+      .orderBy('order.date', 'DESC')
+      .addOrderBy('order.created_at', 'DESC')
+      .addOrderBy('detail.id', 'ASC');
+
+    let hasWhere = false;
+
+    if (search) {
+      const cleanSearch = search.replace(/[^a-zA-Z0-9]/g, '');
+      const cleanBill = this.cleanSql('order.bill_number');
+      const cleanLedgerName = this.cleanSql('ledger.name');
+      const cleanCreator = this.cleanSql('creator.name');
+      const cleanAmount = this.cleanSql('order.total_amount');
+      query.where(
+        `(${cleanBill} LIKE :cleanSearch
+            OR ${cleanLedgerName} LIKE :cleanSearch
+            OR ${cleanCreator} LIKE :cleanSearch
+            OR CAST(order.id AS CHAR) LIKE :search
+            OR ${cleanAmount} LIKE :cleanSearch
+            OR order.date LIKE :search
+            OR order.bill_number LIKE :search
+            OR ledger.name LIKE :search
+            OR order.customer_name LIKE :search
+            OR order.customer_phone LIKE :search
+          )`,
+        { search: `%${search}%`, cleanSearch: `%${cleanSearch}%` },
+      );
+      hasWhere = true;
+    } else if (showAll !== 'true' && range !== 'fy') {
+      query.where("order.status != 'fetched' OR order.synced_at > DATE_SUB(NOW(), INTERVAL 24 HOUR)");
+      hasWhere = true;
+    }
+
+    if (range === 'fy') {
+      const today = new Date();
+      const fyStart = today.getMonth() >= 3
+        ? `${today.getFullYear()}-04-01`
+        : `${today.getFullYear() - 1}-04-01`;
+      if (hasWhere) query.andWhere('order.date >= :fyStart', { fyStart });
+      else { query.where('order.date >= :fyStart', { fyStart }); hasWhere = true; }
+    }
+
+    if (role === 'admin') {
+      const filterId = parseInt(userId);
+      if (!isNaN(filterId) && filterId > 0) {
+        const c = 'order.created_by = :userIdFilter';
+        if (hasWhere) query.andWhere(c, { userIdFilter: filterId });
+        else { query.where(c, { userIdFilter: filterId }); hasWhere = true; }
+      }
+    } else if (role === 'employee' && userId) {
+      const user = (req as any).user;
+      const userPerms = user?.permissions || [];
+      const privileged = userPerms.includes('reports') || userPerms.includes('orders');
+      const c = 'order.created_by = :userIdScoped';
+      if (!privileged) {
+        if (hasWhere) query.andWhere(c, { userIdScoped: parseInt(userId) });
+        else { query.where(c, { userIdScoped: parseInt(userId) }); hasWhere = true; }
+      } else {
+        const filterId = parseInt(userId);
+        if (!isNaN(filterId) && filterId > 0) {
+          const fc = 'order.created_by = :userIdFilter';
+          if (hasWhere) query.andWhere(fc, { userIdFilter: filterId });
+          else { query.where(fc, { userIdFilter: filterId }); hasWhere = true; }
+        }
+      }
+    }
+
+    if (date) {
+      const c = 'order.date = :dateFilter';
+      if (hasWhere) query.andWhere(c, { dateFilter: date });
+      else { query.where(c, { dateFilter: date }); hasWhere = true; }
+    }
+    if (orderType) {
+      const c = 'order.order_type = :orderType';
+      if (hasWhere) query.andWhere(c, { orderType });
+      else { query.where(c, { orderType }); hasWhere = true; }
+    }
+    if (status) {
+      if (status.includes(',')) {
+        const statuses = status.split(',').map(s => s.trim());
+        const c = 'order.status IN (:...statuses)';
+        if (hasWhere) query.andWhere(c, { statuses });
+        else { query.where(c, { statuses }); hasWhere = true; }
+      } else {
+        const c = 'order.status = :status';
+        if (hasWhere) query.andWhere(c, { status });
+        else { query.where(c, { status }); hasWhere = true; }
+      }
+    }
+    if (source) {
+      const c = 'order.source = :sourceFilter';
+      if (hasWhere) query.andWhere(c, { sourceFilter: source });
+      else { query.where(c, { sourceFilter: source }); hasWhere = true; }
+    }
+
+    const orders = await query.getMany();
+
+    const headers = [
+      'Date', 'Time', 'Bill Number', 'Customer Name', 'Phone', 'Address',
+      'City', 'State', 'GSTIN', 'Order Type', 'Status', 'Created By',
+      'Item Name', 'Barcode', 'Category', 'Unit', 'Quantity', 'Rate',
+      'Discount %', 'GST', 'Item Amount', 'Order Total',
+    ];
+
+    const esc = (v: any): string =>
+      String(v ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+    const numCell = (v: any) =>
+      v == null || v === '' || isNaN(Number(v))
+        ? `<Cell><Data ss:Type="String">${esc(v)}</Data></Cell>`
+        : `<Cell><Data ss:Type="Number">${Number(v)}</Data></Cell>`;
+    const strCell = (v: any) => `<Cell><Data ss:Type="String">${esc(v)}</Data></Cell>`;
+
+    const fmtDate = (d: any) => {
+      if (!d) return '';
+      const dt = new Date(d);
+      return isNaN(dt.getTime()) ? String(d) : dt.toLocaleDateString('en-IN');
+    };
+    const fmtTime = (d: any) => {
+      if (!d) return '';
+      const dt = new Date(d);
+      return isNaN(dt.getTime())
+        ? ''
+        : dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    };
+
+    const rows: string[] = [];
+    rows.push(
+      '<Row>' + headers.map(h => `<Cell><Data ss:Type="String">${esc(h)}</Data></Cell>`).join('') + '</Row>',
+    );
+
+    for (const o of orders) {
+      const base = [
+        strCell(fmtDate(o.date)),
+        strCell(fmtTime(o.created_at)),
+        strCell(o.bill_number),
+        strCell(o.customer_name || o.ledger?.name),
+        strCell(o.customer_phone || o.phone_number),
+        strCell(o.customer_address),
+        strCell(o.customer_city),
+        strCell(o.customer_state),
+        strCell(o.customer_gstin),
+        strCell(o.order_type),
+        strCell(o.status),
+        strCell(o.creator?.name || o.creator?.username),
+      ];
+      const items = o.orderDetails && o.orderDetails.length ? o.orderDetails : [null];
+      for (const it of items) {
+        const itemCells = it
+          ? [
+              strCell(it.item_name),
+              strCell(it.barcode),
+              strCell(it.category),
+              strCell(it.unit),
+              numCell(it.quantity),
+              numCell(it.rate),
+              numCell(it.discount_percentage),
+              numCell(it.gst),
+              numCell(it.amount),
+            ]
+          : [strCell(''), strCell(''), strCell(''), strCell(''), strCell(''), strCell(''), strCell(''), strCell(''), strCell('')];
+        rows.push('<Row>' + base.join('') + itemCells.join('') + numCell(o.total_amount) + '</Row>');
+      }
+    }
+
+    const xml =
+      '<?xml version="1.0"?>\n' +
+      '<?mso-application progid="Excel.Sheet"?>\n' +
+      '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" ' +
+      'xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">\n' +
+      '<Worksheet ss:Name="Orders"><Table>\n' +
+      rows.join('\n') +
+      '\n</Table></Worksheet></Workbook>';
+
+    const stamp = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="orders-export-${stamp}.xls"`);
+    res.send('﻿' + xml);
   }
 
   @Get('orders/customer/:phone')
