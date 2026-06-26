@@ -42,3 +42,7 @@ Thumbs.db
 android/app/build/
 android/.gradle/
 android/build/
+
+# EB deploy bundles (build artifacts, not source)
+admin/backend/deploy-admin-customer-live-*.zip
+deploy-admin-customer-live-*.zip

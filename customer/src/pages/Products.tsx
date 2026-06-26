@@ -11,10 +11,15 @@ const SORT_OPTIONS = [
   { label: 'Top Rated',          value: 'rating' },
 ];
 
+// Upper bound for the Max Price filter (slider + typed input).
+const MAX_PRICE_LIMIT = 200000;
+
 export default function Products() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [sort, setSort]           = useState('relevance');
-  const [maxPrice, setMaxPrice]   = useState(10000);
+  // Max price cap defaults to the highest allowed value, so nothing is hidden
+  // until the user lowers it.
+  const [maxPrice, setMaxPrice]   = useState(MAX_PRICE_LIMIT);
   const [minRating, setMinRating] = useState(0);
   const [filtersOpen, setFilters] = useState(false);
   const [products, setProducts]   = useState<Product[]>([]);
@@ -85,7 +90,7 @@ export default function Products() {
 
   // Client-side sort + price / rating filter
   useEffect(() => {
-    let r = [...products].filter(p => p.price <= maxPrice);
+    let r = products.filter(p => p.price <= maxPrice);
     if (minRating > 0) r = r.filter(p => (p.rating ?? 0) >= minRating);
     if (sort === 'price_asc')  r.sort((a, b) => a.price - b.price);
     if (sort === 'price_desc') r.sort((a, b) => b.price - a.price);
@@ -126,11 +131,11 @@ export default function Products() {
 
   const clearAll = () => {
     setMinRating(0);
-    setMaxPrice(10000);
+    setMaxPrice(MAX_PRICE_LIMIT);
     setSearchParams(new URLSearchParams());
   };
 
-  const hasFilters = selectedBrands.size > 0 || selectedCategories.size > 0 || !!search || minRating > 0 || maxPrice < 1500;
+  const hasFilters = selectedBrands.size > 0 || selectedCategories.size > 0 || !!search || minRating > 0 || maxPrice < MAX_PRICE_LIMIT;
 
   const title = search
     ? `Results for "${search}"`
@@ -252,12 +257,27 @@ export default function Products() {
           {/* MAX PRICE */}
           <div className="bg-white rounded-xl p-3 mb-3" style={{ border: '1px solid #E8E8E8' }}>
             <h3 className="text-[11px] font-extrabold text-gray-900 uppercase tracking-wide mb-3">Max Price</h3>
-            <input type="range" min={50} max={1500} step={50} value={maxPrice}
+            <input type="range" min={50} max={MAX_PRICE_LIMIT} step={50}
+              value={Math.min(maxPrice, MAX_PRICE_LIMIT)}
               onChange={e => setMaxPrice(Number(e.target.value))}
               className="w-full" style={{ accentColor: '#0C831F' }} />
-            <div className="flex justify-between text-xs font-semibold mt-1.5">
-              <span style={{ color: '#9E9E9E' }}>₹50</span>
-              <span style={{ color: '#0C831F' }}>₹{maxPrice}</span>
+            <div className="flex items-center justify-between gap-2 mt-2">
+              <span className="text-xs font-semibold" style={{ color: '#9E9E9E' }}>₹50</span>
+              <div className="flex items-center gap-1">
+                <span className="text-xs font-semibold" style={{ color: '#0C831F' }}>₹</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={MAX_PRICE_LIMIT}
+                  value={maxPrice}
+                  onChange={e => {
+                    const v = e.target.value === '' ? 0 : Number(e.target.value);
+                    setMaxPrice(Math.min(v, MAX_PRICE_LIMIT));
+                  }}
+                  className="w-24 text-right text-xs font-semibold rounded-lg px-2 py-1 outline-none"
+                  style={{ color: '#0C831F', border: '1px solid #E8E8E8' }}
+                />
+              </div>
             </div>
           </div>
 
