@@ -16,6 +16,7 @@ import { ItemDetail } from './entities/item-detail.entity';
 import { ItemMedia } from './entities/item-media.entity';
 import { Customer } from './entities/customer.entity';
 import { Address } from './entities/address.entity';
+import { GroupThumbnail } from './entities/group-thumbnail.entity';
 import { TallyService } from './tally.service';
 import { AuthModule } from './auth/auth.module';
 import { ItemDetailsModule } from './item-details/item-details.module';
@@ -39,7 +40,7 @@ import { CustomersController } from './customers.controller';
         username: configService.get<string>('DB_USERNAME', 'root'),
         password: configService.get<string>('DB_PASSWORD', ''),
         database: configService.get<string>('DB_NAME', 'tally_sync'),
-        entities: [Ledger, StockItem, Order, OrderDetail, User, Meta, ItemDetail, ItemMedia, Customer, Address],
+        entities: [Ledger, StockItem, Order, OrderDetail, User, Meta, ItemDetail, ItemMedia, Customer, Address, GroupThumbnail],
         synchronize: process.env.DB_SYNC === 'true', // OFF in prod. Set DB_SYNC=true only for a one-off boot if you need schema sync.
       }),
       inject: [ConfigService],
@@ -52,8 +53,10 @@ import { CustomersController } from './customers.controller';
       User,
       Meta,
       ItemDetail,
+      ItemMedia,
       Customer,
-      Address
+      Address,
+      GroupThumbnail
     ]),
   ],
   controllers: [AppController, UserController, CustomersController],

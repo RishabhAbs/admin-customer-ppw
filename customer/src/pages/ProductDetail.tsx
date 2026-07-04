@@ -121,7 +121,7 @@ export default function ProductDetail() {
             <h1 className="text-2xl font-extrabold leading-tight mb-2 text-gray-900">{product.name}</h1>
             {product.barcode && (
               <p className="text-sm font-bold mb-4 text-gray-600">
-                Barcode: <span className="font-extrabold text-gray-900">{product.barcode}</span>
+                PPW Item Code: <span className="font-extrabold text-gray-900">{product.barcode}</span>
               </p>
             )}
 
@@ -364,7 +364,11 @@ function MediaGallery({ media, alt }: { media: GalleryMedia[]; alt: string }) {
                 />
               ) : (
                 // pointer-events-none so the swipe/tap is handled by the track
-                <img src={m.url} alt={alt} className="max-w-full max-h-full object-contain pointer-events-none" />
+                <img
+                  src={m.url}
+                  alt={alt}
+                  className="max-w-full max-h-full object-contain pointer-events-none"
+                />
               )}
             </div>
           ))}

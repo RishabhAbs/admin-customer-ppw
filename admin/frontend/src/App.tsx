@@ -8,7 +8,8 @@ import Login from './pages/Login';
 import AdminProfile from './pages/AdminProfile';
 import OnlineOrder from './pages/OnlineOrder';
 import Customers from './pages/Customers';
-import { Users, LayoutGrid, ClipboardList, UserCheck, ShoppingBag, UserCircle, LogOut, Shield, X } from 'lucide-react';
+import CatalogImages from './pages/CatalogImages';
+import { Users, LayoutGrid, ClipboardList, UserCheck, ShoppingBag, UserCircle, LogOut, Shield, X, Image } from 'lucide-react';
 import { getUser } from './api';
 import { ConfirmModal } from './components/ConfirmModal';
 import { InstallPWA } from './components/InstallPWA';
@@ -216,6 +217,7 @@ function Layout() {
             <Route path="/orders" element={<AuthGuard permission="reports"><OrderReport /></AuthGuard>} />
             <Route path="/orders/:id" element={<AuthGuard permission="reports"><OrderDetail /></AuthGuard>} />
             <Route path="/customers" element={<AuthGuard permission="orders"><Customers /></AuthGuard>} />
+            <Route path="/catalog-images" element={<AuthGuard permission="inventory"><CatalogImages /></AuthGuard>} />
             <Route path="/profile" element={<AuthGuard permission="staff"><AdminProfile /></AuthGuard>} />
             <Route path="/online-orders" element={<AuthGuard permission="orders"><OnlineOrder /></AuthGuard>} />
             <Route path="*" element={<Navigate to="/" replace />} />
@@ -237,6 +239,7 @@ function Layout() {
                 {hasPerm('orders') && <NavLink to="/online-orders" icon={ShoppingBag} label="Orders" />}
                 {hasPerm('reports') && <NavLink to="/orders" icon={ClipboardList} label="Reports" />}
                 {hasPerm('orders') && <NavLink to="/customers" icon={UserCheck} label="Customers" />}
+                {hasPerm('inventory') && <NavLink to="/catalog-images" icon={Image} label="Images" />}
                 {hasPerm('staff') && <NavLink to="/profile" icon={Users} label="Users" />}
                 {!isAdmin && <NavButton icon={UserCircle} label="Profile" onClick={() => setShowProfile(true)} isActive={showProfile} />}
               </div>

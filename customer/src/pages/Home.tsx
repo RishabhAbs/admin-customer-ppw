@@ -4,7 +4,7 @@ import { ArrowRight, ChevronLeft, ChevronRight, Truck, RefreshCw, Shield, Tag, Z
 import ProductCard, { type Product } from '../components/ProductCard';
 import PostLoginSheet from '../components/PostLoginSheet';
 
-import { fetchProducts, transformStockItemToProduct, fetchBrands, fetchCategories } from '../api';
+import { fetchProducts, transformStockItemToProduct, fetchBrands, fetchCategories, fetchThumbnails, fetchBrandThumbnails, fetchCategoryThumbnails } from '../api';
 
 const CATEGORY_EMOJIS: Record<string, string> = {
   'Writing Instruments': '✏️',
@@ -91,6 +91,8 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [dynamicBrands, setDynamicBrands] = useState<string[]>([]);
   const [dynamicCategories, setDynamicCategories] = useState<string[]>([]);
+  const [brandThumbs, setBrandThumbs] = useState<Record<string, string>>({});
+  const [categoryThumbs, setCategoryThumbs] = useState<Record<string, string>>({});
   const [drillBrand, setDrillBrand] = useState<string | null>(null);
   const location = useLocation();
 
@@ -117,11 +119,22 @@ export default function Home() {
         setBestSellers(transformed.slice(0, 8));
         setNewArrivals(transformed.slice(8, 12));
 
+        // Attach thumbnails in background — don't block render
+        const masterids = res.data.map(i => i.masterid).filter(Boolean) as string[];
+        fetchThumbnails(masterids).then(thumbs => {
+          const withImages = (p: Product) => (p.masterid && thumbs[p.masterid] ? { ...p, image: thumbs[p.masterid] } : p);
+          setBestSellers(prev => prev.map(withImages));
+          setNewArrivals(prev => prev.map(withImages));
+        });
+
         const bList = await fetchBrands();
         setDynamicBrands(bList.slice(0, 16));
-        
+
         const cList = await fetchCategories();
         setAllCategories(cList);
+
+        fetchBrandThumbnails().then(setBrandThumbs);
+        fetchCategoryThumbnails().then(setCategoryThumbs);
       } catch (error) {
         console.error('Failed to load home data:', error);
       } finally {
@@ -278,7 +291,11 @@ export default function Home() {
                     }}
                     className="flex flex-col items-center gap-1.5 py-2.5 px-1.5 rounded-xl transition-all hover:-translate-y-0.5 hover:shadow-sm group"
                     style={{ width: 80, background: getColor(i), minHeight: 80 }}>
-                    <span className="text-2xl group-hover:scale-110 transition-transform duration-200 leading-none flex-shrink-0">{getBrandEmoji(b)}</span>
+                    {brandThumbs[b] ? (
+                      <img src={brandThumbs[b]} alt="" className="w-11 h-11 object-contain group-hover:scale-110 transition-transform duration-200 flex-shrink-0" />
+                    ) : (
+                      <span className="text-2xl group-hover:scale-110 transition-transform duration-200 leading-none flex-shrink-0">{getBrandEmoji(b)}</span>
+                    )}
                     <span className="text-[9px] font-bold text-center leading-tight text-gray-800 w-full" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{b}</span>
                   </button>
                 ))
@@ -289,7 +306,11 @@ export default function Home() {
                     to={`/products?category=${encodeURIComponent(cat)}${drillBrand ? `&brand=${encodeURIComponent(drillBrand)}` : ''}`}
                     className="flex flex-col items-center gap-1.5 py-2.5 px-1.5 rounded-xl transition-all hover:-translate-y-0.5 hover:shadow-sm group"
                     style={{ width: 80, background: getColor(i), minHeight: 80 }}>
-                    <span className="text-2xl group-hover:scale-110 transition-transform duration-200 leading-none flex-shrink-0">{getCategoryEmoji(cat)}</span>
+                    {categoryThumbs[cat] ? (
+                      <img src={categoryThumbs[cat]} alt="" className="w-11 h-11 object-contain group-hover:scale-110 transition-transform duration-200 flex-shrink-0" />
+                    ) : (
+                      <span className="text-2xl group-hover:scale-110 transition-transform duration-200 leading-none flex-shrink-0">{getCategoryEmoji(cat)}</span>
+                    )}
                     <span className="text-[9px] font-bold text-center leading-tight text-gray-800 w-full" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{cat}</span>
                   </Link>
                 ))

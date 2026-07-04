@@ -12,9 +12,13 @@ import {
   HttpException,
   UnauthorizedException,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
   Headers,
   Res,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import type { Response } from 'express';
 import { AppService } from './app.service';
 import { AuthService } from './auth/auth.service';
@@ -28,6 +32,8 @@ import { OrderDetail } from './entities/order-detail.entity';
 import { Meta } from './entities/meta.entity';
 import { Customer } from './entities/customer.entity';
 import { Address } from './entities/address.entity';
+import { ItemMedia } from './entities/item-media.entity';
+import { GroupThumbnail } from './entities/group-thumbnail.entity';
 import { AuthGuard } from '@nestjs/passport';
 import { PermissionsGuard } from './auth/permissions.guard';
 import { RequirePermission } from './auth/permissions.decorator';
@@ -52,6 +58,10 @@ export class AppController {
     private customerRepo: Repository<Customer>,
     @InjectRepository(Address)
     private addressRepo: Repository<Address>,
+    @InjectRepository(ItemMedia)
+    private itemMediaRepo: Repository<ItemMedia>,
+    @InjectRepository(GroupThumbnail)
+    private groupThumbnailRepo: Repository<GroupThumbnail>,
   ) { }
 
   // In-memory rate limit for unauthenticated /orders/online endpoint.
@@ -1108,6 +1118,155 @@ export class AppController {
       console.error('Error in getStockCategories:', error);
       throw error;
     }
+  }
+
+  // One representative product photo per brand/category, for the home page
+  // "By Brand" / "By Category" tiles — picks the lowest-slot image of any
+  // active item in that group, so the tile shows a real product instead of
+  // a generic tag icon whenever at least one photo exists for the group.
+  // An admin-set row in group_thumbnail overrides the auto-pick for that group.
+  private async autoPickGroupThumbnails(
+    groupColumn: 'parent' | 'category',
+  ): Promise<Record<string, string>> {
+    const rows = await this.stockRepo.manager.query(
+      `SELECT g.group_key AS groupKey, g.url_name AS urlName
+       FROM (
+         SELECT s.${groupColumn} AS group_key, m.url_name, m.slot,
+           ROW_NUMBER() OVER (PARTITION BY s.${groupColumn} ORDER BY m.slot ASC, s.id ASC) AS rn
+         FROM stock_item s
+         INNER JOIN media m ON m.masterid = s.masterid AND m.type = 'image'
+         WHERE s.is_active = true AND s.${groupColumn} IS NOT NULL AND s.${groupColumn} != ''
+       ) g
+       WHERE g.rn = 1`,
+    );
+    const result: Record<string, string> = {};
+    for (const row of rows) {
+      result[row.groupKey] = `/api/media/items/${row.urlName}.webp`;
+    }
+    return result;
+  }
+
+  private async getGroupThumbnails(
+    groupColumn: 'parent' | 'category',
+  ): Promise<Record<string, string>> {
+    const auto = await this.autoPickGroupThumbnails(groupColumn);
+    const groupType = groupColumn === 'parent' ? 'brand' : 'category';
+    const overrides = await this.groupThumbnailRepo.find({ where: { group_type: groupType } });
+    for (const o of overrides) {
+      auto[o.group_name] = o.image_url;
+    }
+    return auto;
+  }
+
+  @Get('stock-items/brand-thumbnails')
+  async getBrandThumbnails() {
+    return this.getGroupThumbnails('parent');
+  }
+
+  @Get('stock-items/category-thumbnails')
+  async getCategoryThumbnails() {
+    return this.getGroupThumbnails('category');
+  }
+
+  // ── Admin management of brand/category tile images ──
+  // List every brand/category name with its currently-shown image (override
+  // if set, else the auto-pick) and whether it's an admin override.
+  @UseGuards(AuthGuard('jwt'), PermissionsGuard)
+  @RequirePermission('inventory')
+  @Get('admin/group-thumbnails')
+  async listGroupThumbnails(@Query('type') type: string) {
+    const groupType: 'brand' | 'category' = type === 'category' ? 'category' : 'brand';
+    const groupColumn = groupType === 'category' ? 'category' : 'parent';
+
+    const names = groupType === 'category'
+      ? await this.getStockCategories('', '')
+      : await this.getStockBrands('');
+
+    const auto = await this.autoPickGroupThumbnails(groupColumn);
+    const overrides = await this.groupThumbnailRepo.find({ where: { group_type: groupType } });
+    const overrideMap = new Map(overrides.map((o) => [o.group_name, o]));
+
+    return (names as string[]).map((name) => {
+      const ov = overrideMap.get(name);
+      return {
+        name,
+        image_url: ov?.image_url ?? auto[name] ?? null,
+        is_override: !!ov,
+      };
+    });
+  }
+
+  // Set an override — either { source: 'item', masterid, slot } to reuse an
+  // existing item's photo, or a multipart 'file' to upload a new image.
+  @UseGuards(AuthGuard('jwt'), PermissionsGuard)
+  @RequirePermission('inventory')
+  @Put('admin/group-thumbnails/:type/:name')
+  @UseInterceptors(FileInterceptor('file'))
+  async setGroupThumbnail(
+    @Param('type') type: string,
+    @Param('name') name: string,
+    @Body() body: any,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Request() req: any,
+  ) {
+    const groupType: 'brand' | 'category' = type === 'category' ? 'category' : 'brand';
+    let imageUrl: string;
+    let source: 'item' | 'upload';
+
+    if (file) {
+      const bucket = process.env.S3_BUCKET_NAME || '';
+      const region = process.env.AWS_REGION || 'ap-south-1';
+      if (!bucket) {
+        throw new HttpException('S3_BUCKET_NAME is not configured on the server', 500);
+      }
+      const ext = (file.mimetype.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      // Filed under uploads/items/ so the existing MediaController route can
+      // serve it without a dedicated endpoint. Prefixed so it can never
+      // collide with a real item's <code>img<N> filename.
+      const filename = `group-${groupType}-${slug}-${Date.now()}.${ext}`;
+      const s3 = new S3Client({ region });
+      await s3.send(new PutObjectCommand({
+        Bucket: bucket,
+        Key: `uploads/items/${filename}`,
+        Body: file.buffer,
+        ContentType: file.mimetype,
+      }));
+      imageUrl = `/api/media/items/${filename}`;
+      source = 'upload';
+    } else if (body?.source === 'item' && body?.masterid && body?.slot) {
+      const media = await this.itemMediaRepo.findOne({
+        where: { masterid: body.masterid, slot: body.slot, type: 'image' },
+      });
+      if (!media) throw new HttpException('No image found for that item/slot', 400);
+      imageUrl = `/api/media/items/${media.url_name}.webp`;
+      source = 'item';
+    } else {
+      throw new HttpException(
+        'Provide either a file upload or { source: "item", masterid, slot }',
+        400,
+      );
+    }
+
+    let row = await this.groupThumbnailRepo.findOne({
+      where: { group_type: groupType, group_name: name },
+    });
+    if (!row) row = this.groupThumbnailRepo.create({ group_type: groupType, group_name: name });
+    row.image_url = imageUrl;
+    row.source = source;
+    row.updated_by = req.user?.id;
+    await this.groupThumbnailRepo.save(row);
+
+    return { success: true, image_url: imageUrl };
+  }
+
+  @UseGuards(AuthGuard('jwt'), PermissionsGuard)
+  @RequirePermission('inventory')
+  @Delete('admin/group-thumbnails/:type/:name')
+  async deleteGroupThumbnail(@Param('type') type: string, @Param('name') name: string) {
+    const groupType: 'brand' | 'category' = type === 'category' ? 'category' : 'brand';
+    await this.groupThumbnailRepo.delete({ group_type: groupType, group_name: name });
+    return { success: true };
   }
 
   // Orders with pagination

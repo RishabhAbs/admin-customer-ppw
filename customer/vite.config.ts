@@ -7,21 +7,14 @@ export default defineConfig({
   server: {
     port: 5174,
     proxy: {
-      // Media FILES live on the PPW staff backend (:3000) — that's where the
-      // admin app uploads them. This rule must come before the generic '/api'
-      // rule so image/video requests resolve against the backend that has them.
-      '/api/media': {
-        target: 'http://localhost:3000',
-        changeOrigin: true,
-      },
-      // Everything else (product data, item-details, thumbnails) is served by
-      // the local backend (:3002), whose customer-facing routes are public.
+      // Single backend (:3002 in local dev, per admin/backend/.env PORT) serves
+      // product data, item-details, thumbnails, and media/uploads (/public).
       '/api': {
         target: 'http://localhost:3002',
         changeOrigin: true,
       },
       '/public': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:3002',
         changeOrigin: true,
       },
     },

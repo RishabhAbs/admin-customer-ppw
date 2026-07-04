@@ -157,6 +157,27 @@ export const fetchCategories = async (search: string = '', brand: string = ''): 
   return (data as string[]).filter(c => c && c.toLowerCase() !== 'not applicable');
 };
 
+// One representative product photo per brand/category, for the home page
+// "By Brand" / "By Category" tiles. Falls back to {} on error so callers can
+// keep using their emoji fallback.
+export const fetchBrandThumbnails = async (): Promise<Record<string, string>> => {
+  try {
+    const { data } = await api.get('/stock-items/brand-thumbnails');
+    return data;
+  } catch {
+    return {};
+  }
+};
+
+export const fetchCategoryThumbnails = async (): Promise<Record<string, string>> => {
+  try {
+    const { data } = await api.get('/stock-items/category-thumbnails');
+    return data;
+  } catch {
+    return {};
+  }
+};
+
 export const fetchThumbnails = async (masterids: string[]): Promise<Record<string, string>> => {
   if (!masterids.length) return {};
   try {

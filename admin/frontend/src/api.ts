@@ -232,4 +232,41 @@ export const deleteItemImage = async (masterid: string, slot: number) => {
     return response.data;
 };
 
+// Brand / Category tile images (home page "By Brand" / "By Category")
+export type GroupThumbnail = { name: string; image_url: string | null; is_override: boolean };
+
+export const listGroupThumbnails = async (type: 'brand' | 'category'): Promise<GroupThumbnail[]> => {
+    const response = await api.get('/admin/group-thumbnails', { params: { type } });
+    return response.data;
+};
+
+export const setGroupThumbnailFromItem = async (
+    type: 'brand' | 'category',
+    name: string,
+    masterid: string,
+    slot: string,
+) => {
+    const response = await api.put(
+        `/admin/group-thumbnails/${type}/${encodeURIComponent(name)}`,
+        { source: 'item', masterid, slot },
+    );
+    return response.data;
+};
+
+export const uploadGroupThumbnail = async (type: 'brand' | 'category', name: string, file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.put(
+        `/admin/group-thumbnails/${type}/${encodeURIComponent(name)}`,
+        formData,
+        { headers: { 'Content-Type': 'multipart/form-data' } },
+    );
+    return response.data;
+};
+
+export const deleteGroupThumbnail = async (type: 'brand' | 'category', name: string) => {
+    const response = await api.delete(`/admin/group-thumbnails/${type}/${encodeURIComponent(name)}`);
+    return response.data;
+};
+
 export default api;
