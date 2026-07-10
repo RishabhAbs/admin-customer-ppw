@@ -43,6 +43,9 @@ android/app/build/
 android/.gradle/
 android/build/
 
+# Built APKs (produced by CI / local builds, not source)
+*.apk
+
 # EB deploy bundles (build artifacts, not source)
 admin/backend/deploy-admin-customer-live-*.zip
 deploy-admin-customer-live-*.zip

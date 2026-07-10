@@ -1,8 +1,13 @@
 import { useState, useRef, useEffect, type KeyboardEvent } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Mail, Phone, ArrowLeft, CheckCircle, RefreshCw, User, ShoppingBag } from 'lucide-react';
+import { Mail, Phone, ArrowLeft, CheckCircle, RefreshCw, User, ShoppingBag, Download } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 import { useAuth } from '../context/AuthContext';
 import api from '../api';
+import { APK_URL } from '../config';
+
+// Hide the "Install App" button when we're already running inside the native app.
+const isNativeApp = Capacitor.isNativePlatform();
 
 type Mode = 'signin' | 'signup' | 'otp';
 type OtpFor = 'signin' | 'signup';
@@ -242,6 +247,15 @@ export default function AuthPage() {
                   Create New Account
                 </button>
               </div>
+
+              {/* Install the Android app (web-only — hidden inside the native app itself) */}
+              {!isNativeApp && (
+                <a href={APK_URL} download
+                  className="mt-4 w-full max-w-[400px] h-11 sm:h-12 rounded-xl text-[13px] font-bold tracking-wide transition-all duration-200 hover:shadow-md active:scale-[0.98] flex items-center justify-center gap-2"
+                  style={{ border: `1.5px solid rgba(184,128,74,0.3)`, color: copperDark, background: 'rgba(255,255,255,0.6)' }}>
+                  <Download size={16} /> Install Android App
+                </a>
+              )}
             </div>
           )}
 

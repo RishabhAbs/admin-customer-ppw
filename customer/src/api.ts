@@ -1,8 +1,11 @@
 import axios from 'axios';
+import { API_BASE, mediaUrl } from './config';
 
-// Ensure this matches the Vite proxy configuration
+// On web, API_BASE is '' so this stays '/api' (Vite proxy in dev, same-origin in
+// prod). Inside the native APK, API_BASE is the production origin so requests hit
+// https://onlineppw.com/api instead of the non-existent capacitor:// origin.
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: `${API_BASE}/api`,
 });
 
 // Response Types
@@ -160,10 +163,15 @@ export const fetchCategories = async (search: string = '', brand: string = ''): 
 // One representative product photo per brand/category, for the home page
 // "By Brand" / "By Category" tiles. Falls back to {} on error so callers can
 // keep using their emoji fallback.
+// Backend returns root-relative media paths (e.g. '/api/media/items/x.webp').
+// Resolve them to absolute URLs so they load inside the native APK too.
+const resolveThumbMap = (data: Record<string, string>): Record<string, string> =>
+  Object.fromEntries(Object.entries(data || {}).map(([k, v]) => [k, mediaUrl(v)]));
+
 export const fetchBrandThumbnails = async (): Promise<Record<string, string>> => {
   try {
     const { data } = await api.get('/stock-items/brand-thumbnails');
-    return data;
+    return resolveThumbMap(data);
   } catch {
     return {};
   }
@@ -172,7 +180,7 @@ export const fetchBrandThumbnails = async (): Promise<Record<string, string>> =>
 export const fetchCategoryThumbnails = async (): Promise<Record<string, string>> => {
   try {
     const { data } = await api.get('/stock-items/category-thumbnails');
-    return data;
+    return resolveThumbMap(data);
   } catch {
     return {};
   }
@@ -182,7 +190,7 @@ export const fetchThumbnails = async (masterids: string[]): Promise<Record<strin
   if (!masterids.length) return {};
   try {
     const { data } = await api.get('/item-details/thumbnails', { params: { masterids: masterids.join(',') } });
-    return data;
+    return resolveThumbMap(data);
   } catch {
     return {};
   }
@@ -191,7 +199,10 @@ export const fetchThumbnails = async (masterids: string[]): Promise<Record<strin
 export const fetchProductDetail = async (masterid: string): Promise<FullItemDetail> => {
     // Some products might not have details, we handle gracefully
     try {
-        const { data } = await api.get(`/item-details/${masterid}`);
+        const { data } = await api.get(`/item-details/${masterid}`) as { data: FullItemDetail };
+        // Resolve relative media paths so images/videos load inside the native APK.
+        if (data.images) data.images = data.images.map(i => ({ ...i, image_url: mediaUrl(i.image_url) }));
+        if (data.videos) data.videos = data.videos.map(v => ({ ...v, video_url: mediaUrl(v.video_url) }));
         return data;
     } catch (e) {
         console.warn(`Could not fetch details for masterid ${masterid}`);
