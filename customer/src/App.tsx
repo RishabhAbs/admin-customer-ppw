@@ -1,5 +1,7 @@
 import { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Outlet, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Outlet, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Capacitor } from '@capacitor/core';
+import { App as CapacitorApp } from '@capacitor/app';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { enableContentProtection } from './utils/contentProtection';
 import { CartProvider } from './context/CartContext';
@@ -17,6 +19,30 @@ import Login from './pages/Login';
 import Profile from './pages/Profile';
 import ProfileEdit from './pages/ProfileEdit';
 import Addresses from './pages/Addresses';
+
+// On Android, the hardware back button / edge swipe defaults to closing the app.
+// Wire it to the SPA history instead: go back a page when we can, and only send
+// the app to the background (not exit) when we're already at a root screen.
+// No-op on web, where the browser/OS handles back natively.
+function AndroidBackButton() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    let remove: (() => void) | undefined;
+    CapacitorApp.addListener('backButton', ({ canGoBack }) => {
+      const path = window.location.pathname;
+      const atRoot = path === '/' || path === '/login';
+      if (canGoBack && !atRoot) {
+        navigate(-1);
+      } else {
+        // Standard Android behaviour at the root: background the app, don't kill it.
+        CapacitorApp.minimizeApp();
+      }
+    }).then(h => { remove = () => h.remove(); });
+    return () => { remove?.(); };
+  }, [navigate]);
+  return null;
+}
 
 function MainLayout() {
   return (
@@ -67,6 +93,7 @@ export default function App() {
         <CartProvider>
           <OrderProvider>
           <ScrollToTop />
+          <AndroidBackButton />
           <Routes>
             {/* Public: browse freely, including shared product links. No login. */}
             <Route element={<PublicLayout />}>

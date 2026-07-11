@@ -177,23 +177,23 @@ export default function Products() {
 
        {/* ── Active filter chips ── */}
        {activeChipCount > 0 && (
-         <div className="flex flex-nowrap items-center gap-1.5 mb-3 overflow-x-auto scrollbar-hide pb-1">
+         <div className="flex flex-nowrap items-center gap-1.5 mb-3 overflow-x-auto scrollbar-hide pb-1 -mx-3 px-3">
           {[...selectedBrands].map(b => (
             <button key={b} onClick={() => toggleBrand(b)}
-              className="flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full transition-all hover:opacity-80"
+              className="flex-shrink-0 flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full transition-all hover:opacity-80 max-w-[45vw]"
               style={{ background: '#EFF7EF', color: '#0C831F', border: '1px solid rgba(12,131,31,0.25)' }}>
-              {b} <X size={10} />
+              <span className="truncate">{b}</span> <X size={10} className="flex-shrink-0" />
             </button>
           ))}
            {[...selectedCategories].map(c => (
              <button key={c} onClick={() => toggleCategory(c)}
-               className="flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full transition-all hover:opacity-80 whitespace-nowrap"
+               className="flex-shrink-0 flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full transition-all hover:opacity-80 max-w-[45vw]"
                style={{ background: '#FFF3E0', color: '#E65100', border: '1px solid rgba(230,81,0,0.25)' }}>
-               {c} <X size={10} />
+               <span className="truncate">{c}</span> <X size={10} className="flex-shrink-0" />
              </button>
            ))}
           <button onClick={clearAll}
-            className="text-[11px] font-bold px-2.5 py-1 rounded-full transition-all hover:opacity-80"
+            className="flex-shrink-0 whitespace-nowrap text-[11px] font-bold px-2.5 py-1 rounded-full transition-all hover:opacity-80"
             style={{ background: 'rgba(226,55,68,0.08)', color: '#E23744', border: '1px solid rgba(226,55,68,0.2)' }}>
             Clear all
           </button>

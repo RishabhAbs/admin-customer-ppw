@@ -18,11 +18,10 @@ export const mediaUrl = (u?: string | null): string => {
 };
 
 // Download URL for the installable Android build, used by the "Install App" button
-// on the login page. The GitHub Actions workflow publishes the signed APK as a
-// release asset; the `releases/latest/download/...` URL always resolves to the
-// newest build, so this needs no server hosting. Requires the repo to be public
-// (or host the APK on onlineppw.com and override with VITE_APK_URL). See
+// on the login page. Hosted on S3 (public-read) so it needs no GitHub Release and
+// works while the repo is private. Override with VITE_APK_URL to point at a signed
+// release build (e.g. the GitHub Actions release asset) once one exists. See
 // SETUP-MOBILE.md.
 export const APK_URL =
   import.meta.env.VITE_APK_URL ||
-  'https://github.com/RishabhAbs/admin-customer-ppw/releases/latest/download/PurbanchalPapers.apk';
+  'https://abs-ppw-media.s3.ap-south-1.amazonaws.com/app/PurbanchalPapers.apk';
