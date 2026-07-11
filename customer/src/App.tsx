@@ -32,7 +32,11 @@ function AndroidBackButton() {
     CapacitorApp.addListener('backButton', ({ canGoBack }) => {
       const path = window.location.pathname;
       const atRoot = path === '/' || path === '/login';
-      if (canGoBack && !atRoot) {
+      // Go back a page whenever we're not on a root screen and there's history
+      // to pop — covers both the hardware back button and the edge-swipe gesture,
+      // which fire the same event. Fall back to canGoBack OR the SPA history
+      // length so a false canGoBack doesn't strand us into an app exit.
+      if (!atRoot && (canGoBack || window.history.length > 1)) {
         navigate(-1);
       } else {
         // Standard Android behaviour at the root: background the app, don't kill it.
