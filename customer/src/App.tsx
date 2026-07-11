@@ -29,18 +29,21 @@ function AndroidBackButton() {
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
     let remove: (() => void) | undefined;
-    CapacitorApp.addListener('backButton', ({ canGoBack }) => {
+    let lastAt = 0;
+    CapacitorApp.addListener('backButton', () => {
+      // Android can deliver the back button / edge-swipe as a rapid double event;
+      // popping history for both jumps two pages back (so every screen appears to
+      // go straight Home). Debounce so a single gesture pops exactly one entry.
+      const now = Date.now();
+      if (now - lastAt < 500) return;
+      lastAt = now;
       const path = window.location.pathname;
-      const atRoot = path === '/' || path === '/login';
-      // Go back a page whenever we're not on a root screen and there's history
-      // to pop — covers both the hardware back button and the edge-swipe gesture,
-      // which fire the same event. Fall back to canGoBack OR the SPA history
-      // length so a false canGoBack doesn't strand us into an app exit.
-      if (!atRoot && (canGoBack || window.history.length > 1)) {
-        navigate(-1);
-      } else {
-        // Standard Android behaviour at the root: background the app, don't kill it.
+      if (path === '/' || path === '/login') {
+        // At a root screen: background the app instead of exiting or looping.
         CapacitorApp.minimizeApp();
+      } else {
+        // Everywhere else: go to the actual previous page.
+        navigate(-1);
       }
     }).then(h => { remove = () => h.remove(); });
     return () => { remove?.(); };
