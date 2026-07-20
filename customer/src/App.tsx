@@ -10,6 +10,7 @@ import Navbar from './components/Navbar';
 import ScrollToTop from './components/ScrollToTop';
 import Footer from './components/Footer';
 import Home from './pages/Home';
+import Browse from './pages/Browse';
 import Products from './pages/Products';
 import ProductDetail from './pages/ProductDetail';
 import Cart from './pages/Cart';
@@ -105,6 +106,8 @@ export default function App() {
             {/* Public: browse freely, including shared product links. No login. */}
             <Route element={<PublicLayout />}>
               <Route path="/" element={<Home />} />
+              <Route path="/brands" element={<Browse mode="brand" />} />
+              <Route path="/categories" element={<Browse mode="category" />} />
               <Route path="/products" element={<Products />} />
               <Route path="/products/:id" element={<ProductDetail />} />
               <Route path="/cart" element={<Cart />} />

@@ -1,0 +1,2 @@
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/web-__XF58eD.js","assets/index-DAxms4E5.js","assets/index-jXts-Wvs.css"])))=>i.map(i=>d[i]);
+import{i as e,r as t}from"./index-DAxms4E5.js";var n=t(`PrivacyScreen`,{web:()=>e(()=>import(`./web-__XF58eD.js`).then(e=>new e.PrivacyScreenWeb),__vite__mapDeps([0,1,2]))});export{n as PrivacyScreen};

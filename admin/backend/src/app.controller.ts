@@ -945,8 +945,14 @@ export class AppController {
       }
 
       if (search) {
-        // Split into terms and filter out common currency stop-words that might not be in DB exactly
-        const stopWords = ['rs', 'rupee', 'rupees', 'inr', 'rp', 'rs.', 'rupee.', 'rupees.', '/'];
+        // Split into terms and filter out common currency / price-intent stop-words
+        // that describe the price but aren't stored in any DB field. Without this,
+        // a query like "5 MRP pen" ANDs an impossible "MRP" term and returns nothing.
+        const stopWords = [
+          'rs', 'rupee', 'rupees', 'inr', 'rp', 'rs.', 'rupee.', 'rupees.', '/',
+          'mrp', 'price', 'priced', 'cost', 'costs', 'costing',
+          'under', 'below', 'upto', 'around', 'about', 'approx', 'near', '@',
+        ];
         const terms = search.split(/\s+/)
           .filter(t => t.length > 0)
           .filter(t => !stopWords.includes(t.toLowerCase()));
@@ -954,11 +960,20 @@ export class AppController {
         terms.forEach((term, index) => {
           const tKey = `term${index}`;
           const ctKey = `cleanTerm${index}`;
+          const sKey = `sing${index}`;
           const cleanTerm = term.replace(/[^a-zA-Z0-9]/g, '');
-          
-          const termParams = {
+
+          // Cheap singularization so "pens" matches "PEN", "boxes" matches "BOX".
+          // Without this the AND-of-terms below drops the whole result set to
+          // empty on a plural query (e.g. "10 rupee pens" → 0 products).
+          let sing = term;
+          if (sing.length > 3 && sing.endsWith('es')) sing = sing.slice(0, -2);
+          else if (sing.length > 3 && sing.endsWith('s')) sing = sing.slice(0, -1);
+
+          const termParams: Record<string, string> = {
             [tKey]: `%${term}%`,
-            [ctKey]: `%${cleanTerm}%`
+            [ctKey]: `%${cleanTerm}%`,
+            [sKey]: `%${sing}%`,
           };
 
           const cleanName = this.cleanSql('stock.name');
@@ -966,11 +981,14 @@ export class AppController {
           const cleanMrp = this.cleanSql('stock.default_mrp');
 
           query.andWhere(
-            `(stock.name LIKE :${tKey} 
-              OR stock.masterid LIKE :${tKey} 
+            `(stock.name LIKE :${tKey}
+              OR stock.masterid LIKE :${tKey}
               OR stock.default_mrp LIKE :${tKey}
               OR stock.group LIKE :${tKey}
               OR stock.category LIKE :${tKey}
+              OR stock.name LIKE :${sKey}
+              OR stock.group LIKE :${sKey}
+              OR stock.category LIKE :${sKey}
               OR ${cleanName} LIKE :${ctKey}
               OR ${cleanMasterId} LIKE :${ctKey}
               OR ${cleanMrp} LIKE :${ctKey}
@@ -1125,37 +1143,20 @@ export class AppController {
   // active item in that group, so the tile shows a real product instead of
   // a generic tag icon whenever at least one photo exists for the group.
   // An admin-set row in group_thumbnail overrides the auto-pick for that group.
-  private async autoPickGroupThumbnails(
-    groupColumn: 'parent' | 'category',
-  ): Promise<Record<string, string>> {
-    const rows = await this.stockRepo.manager.query(
-      `SELECT g.group_key AS groupKey, g.url_name AS urlName
-       FROM (
-         SELECT s.${groupColumn} AS group_key, m.url_name, m.slot,
-           ROW_NUMBER() OVER (PARTITION BY s.${groupColumn} ORDER BY m.slot ASC, s.id ASC) AS rn
-         FROM stock_item s
-         INNER JOIN media m ON m.masterid = s.masterid AND m.type = 'image'
-         WHERE s.is_active = true AND s.${groupColumn} IS NOT NULL AND s.${groupColumn} != ''
-       ) g
-       WHERE g.rn = 1`,
-    );
-    const result: Record<string, string> = {};
-    for (const row of rows) {
-      result[row.groupKey] = `/api/media/items/${row.urlName}.webp`;
-    }
-    return result;
-  }
-
+  // Public brand/category tile images. Only returns images an admin has
+  // explicitly set (overrides). We intentionally do NOT auto-pick the first
+  // product photo per brand/category — tiles without an admin-chosen image fall
+  // back to the emoji/icon on the client.
   private async getGroupThumbnails(
     groupColumn: 'parent' | 'category',
   ): Promise<Record<string, string>> {
-    const auto = await this.autoPickGroupThumbnails(groupColumn);
     const groupType = groupColumn === 'parent' ? 'brand' : 'category';
     const overrides = await this.groupThumbnailRepo.find({ where: { group_type: groupType } });
+    const result: Record<string, string> = {};
     for (const o of overrides) {
-      auto[o.group_name] = o.image_url;
+      result[o.group_name] = o.image_url;
     }
-    return auto;
+    return result;
   }
 
   @Get('stock-items/brand-thumbnails')
@@ -1169,28 +1170,28 @@ export class AppController {
   }
 
   // ── Admin management of brand/category tile images ──
-  // List every brand/category name with its currently-shown image (override
-  // if set, else the auto-pick) and whether it's an admin override.
+  // List every brand/category name with its admin-set image (if any) and whether
+  // an override exists. Names without an override have no image (icon fallback).
   @UseGuards(AuthGuard('jwt'), PermissionsGuard)
   @RequirePermission('inventory')
   @Get('admin/group-thumbnails')
   async listGroupThumbnails(@Query('type') type: string) {
     const groupType: 'brand' | 'category' = type === 'category' ? 'category' : 'brand';
-    const groupColumn = groupType === 'category' ? 'category' : 'parent';
 
     const names = groupType === 'category'
       ? await this.getStockCategories('', '')
       : await this.getStockBrands('');
 
-    const auto = await this.autoPickGroupThumbnails(groupColumn);
     const overrides = await this.groupThumbnailRepo.find({ where: { group_type: groupType } });
     const overrideMap = new Map(overrides.map((o) => [o.group_name, o]));
 
+    // Only an admin-set image counts as the tile image. Names without an
+    // override return null so the panel (and the storefront) show the icon.
     return (names as string[]).map((name) => {
       const ov = overrideMap.get(name);
       return {
         name,
-        image_url: ov?.image_url ?? auto[name] ?? null,
+        image_url: ov?.image_url ?? null,
         is_override: !!ov,
       };
     });

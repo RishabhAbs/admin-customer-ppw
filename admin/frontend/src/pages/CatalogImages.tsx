@@ -172,9 +172,9 @@ export default function CatalogImages() {
         isOpen={!!deleting}
         onClose={() => setDeleting(null)}
         onConfirm={handleDelete}
-        title="Reset to default image?"
-        message={`"${deleting?.name}" will go back to showing an auto-picked photo from one of its items.`}
-        confirmText="Reset"
+        title="Remove image?"
+        message={`"${deleting?.name}" will go back to showing the default icon until you set an image.`}
+        confirmText="Remove"
         isDangerous
       />
     </div>

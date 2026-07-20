@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { SlidersHorizontal, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import ProductCard, { type Product } from '../components/ProductCard';
 import { fetchProducts, transformStockItemToProduct, fetchBrands, fetchCategories, fetchThumbnails } from '../api';
+import { extractPriceHints } from '../searchRanking';
 
 const SORT_OPTIONS = [
   { label: 'Relevance',          value: 'relevance' },
@@ -46,6 +47,10 @@ export default function Products() {
     () => new Set(categoryParam ? categoryParam.split(',').filter(Boolean) : []),
     [categoryParam],
   );
+
+  // Price hints parsed from the search term ("5 MRP pen" → [5]). Used to order
+  // the Relevance view by how close each product's price is to what was asked.
+  const priceHints = useMemo(() => extractPriceHints(search), [search]);
 
   // Fetch products whenever filters change
   useEffect(() => {
@@ -92,11 +97,17 @@ export default function Products() {
   useEffect(() => {
     let r = products.filter(p => p.price <= maxPrice);
     if (minRating > 0) r = r.filter(p => (p.rating ?? 0) >= minRating);
-    if (sort === 'price_asc')  r.sort((a, b) => a.price - b.price);
-    if (sort === 'price_desc') r.sort((a, b) => b.price - a.price);
-    if (sort === 'rating')     r.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+    if (sort === 'price_asc')  r = [...r].sort((a, b) => a.price - b.price);
+    else if (sort === 'price_desc') r = [...r].sort((a, b) => b.price - a.price);
+    else if (sort === 'rating')     r = [...r].sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+    else if (sort === 'relevance' && priceHints.length) {
+      // Order by nearest price to any hint, so "5 MRP pen" shows ₹5 pens first.
+      const proximity = (p: Product) =>
+        Math.min(...priceHints.map(h => Math.abs((p.price || 0) - h)));
+      r = [...r].sort((a, b) => proximity(a) - proximity(b));
+    }
     setFiltered(r);
-  }, [products, sort, maxPrice, minRating]);
+  }, [products, sort, maxPrice, minRating, priceHints]);
 
   // Sync page from URL
   useEffect(() => {

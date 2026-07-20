@@ -149,15 +149,20 @@ export const fetchProducts = async (params: {
   return data;
 };
 
+// Normalize away spaces, punctuation and any stray Tally glyphs (e.g. the "≣ "
+// prefix) so placeholder values match regardless of hidden characters.
+const normalizeTag = (s: string) => (s || '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+
 export const fetchBrands = async (search: string = ''): Promise<string[]> => {
   const { data } = await api.get('/stock-items/brands', { params: { search } });
-  return data;
+  // Drop Tally's root parent group "Primary"
+  return (data as string[]).filter(b => b && normalizeTag(b) !== 'primary');
 };
 
 export const fetchCategories = async (search: string = '', brand: string = ''): Promise<string[]> => {
   const { data } = await api.get('/stock-items/categories', { params: { search, brand } });
-  // Filter out placeholder/empty Tally values
-  return (data as string[]).filter(c => c && c.toLowerCase() !== 'not applicable');
+  // Drop Tally's placeholder "Not Applicable"
+  return (data as string[]).filter(c => c && normalizeTag(c) !== 'notapplicable');
 };
 
 // One representative product photo per brand/category, for the home page

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ArrowRight, ChevronLeft, ChevronRight, Truck, RefreshCw, Shield, Tag, Zap, Building2, PackageCheck, Headphones } from 'lucide-react';
+import { ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import ProductCard, { type Product } from '../components/ProductCard';
 import PostLoginSheet from '../components/PostLoginSheet';
 
@@ -16,41 +16,6 @@ const CATEGORY_EMOJIS: Record<string, string> = {
   'Files & Folders':     '📁',
   'Bags & Pouches':      '🎒',
 };
-
-const BANNERS = [
-  {
-    title: 'Complete Stationery Solutions',
-    sub: 'Notebooks, pens, office essentials & more for your business',
-    cta: 'Shop Catalog',
-    link: '/products',
-    emoji: '📝',
-    bg: '#F8C420',
-    textColor: '#1C1C1C',
-    subColor: 'rgba(28,28,28,0.65)',
-  },
-  {
-    categoryKey: 'Office Supplies',
-    title: 'Professional Office Essentials',
-    sub: 'Quality files, folders, and desk supplies for maximum productivity',
-    cta: 'Explore Office',
-    link: '/products?category=Office+Supplies',
-    emoji: '📁',
-    bg: '#0C831F',
-    textColor: 'white',
-    subColor: 'rgba(255,255,255,0.75)',
-  },
-  {
-    categoryKey: 'Writing Instruments',
-    title: 'Precision Writing Tools',
-    sub: 'Explore a curated range of high-quality pens and drawing instruments',
-    cta: 'Browse Pens',
-    link: '/products?category=Writing+Instruments',
-    emoji: '✒️',
-    bg: '#1C1C1C',
-    textColor: 'white',
-    subColor: 'rgba(255,255,255,0.65)',
-  },
-];
 
 const CATEGORY_BGS = ['#FFF9E6', '#FFF3E0', '#FCE4EC', '#E8F5E9', '#E3F2FD', '#EDE7F6', '#FFF8E1', '#F3E5F5'];
 
@@ -72,23 +37,19 @@ function getColor(index: number) {
   return CATEGORY_BGS[index % CATEGORY_BGS.length];
 }
 
-const PERKS = [
-  { icon: <PackageCheck size={16} strokeWidth={2.5} />, title: 'Quality Checked', desc: 'Verified products' },
-  { icon: <Truck size={16} strokeWidth={2.5} />,        title: 'Free Shipping',   desc: 'Above ₹499' },
-  { icon: <Tag size={16} strokeWidth={2.5} />,          title: 'Bulk Discounts',  desc: 'Buy more, save more' },
-  { icon: <RefreshCw size={16} strokeWidth={2.5} />,    title: 'Easy Returns',    desc: '7-day policy' },
-  { icon: <Shield size={16} strokeWidth={2.5} />,       title: '100% Genuine',    desc: 'Authentic products' },
-];
-
 /* ── COMPONENT ── */
 
 export default function Home() {
-  const [bannerIdx, setBannerIdx] = useState(0);
   const [showSheet, setShowSheet] = useState(false);
   const [shopTab, setShopTab]       = useState<'brand' | 'category'>('brand');
   const [bestSellers, setBestSellers] = useState<Product[]>([]);
+  const [bsPage, setBsPage] = useState(1);
+  const [bsTotalPages, setBsTotalPages] = useState(1);
+  const [bsLoading, setBsLoading] = useState(true);
   const [newArrivals, setNewArrivals] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [naPage, setNaPage] = useState(1);
+  const [naTotalPages, setNaTotalPages] = useState(1);
+  const [naLoading, setNaLoading] = useState(true);
   const [dynamicBrands, setDynamicBrands] = useState<string[]>([]);
   const [dynamicCategories, setDynamicCategories] = useState<string[]>([]);
   const [brandThumbs, setBrandThumbs] = useState<Record<string, string>>({});
@@ -97,52 +58,76 @@ export default function Home() {
   const location = useLocation();
 
   useEffect(() => {
-    const t = setInterval(() => setBannerIdx(i => (i + 1) % BANNERS.length), 4500);
-    return () => clearInterval(t);
-  }, []);
-
-  useEffect(() => {
     if ((location.state as any)?.justLoggedIn) {
       setShowSheet(true);
       window.history.replaceState({}, '');
     }
   }, []);
 
-  const [allCategories, setAllCategories] = useState<string[]>([]);
 
-  // Loading Home Data
+  // Loading Home Data (brands/categories)
   useEffect(() => {
     const loadHomeData = async () => {
       try {
-        const res = await fetchProducts({ limit: 12 });
-        const transformed = res.data.map(transformStockItemToProduct);
-        setBestSellers(transformed.slice(0, 8));
-        setNewArrivals(transformed.slice(8, 12));
-
-        // Attach thumbnails in background — don't block render
-        const masterids = res.data.map(i => i.masterid).filter(Boolean) as string[];
-        fetchThumbnails(masterids).then(thumbs => {
-          const withImages = (p: Product) => (p.masterid && thumbs[p.masterid] ? { ...p, image: thumbs[p.masterid] } : p);
-          setBestSellers(prev => prev.map(withImages));
-          setNewArrivals(prev => prev.map(withImages));
-        });
-
         const bList = await fetchBrands();
         setDynamicBrands(bList.slice(0, 16));
-
-        const cList = await fetchCategories();
-        setAllCategories(cList);
 
         fetchBrandThumbnails().then(setBrandThumbs);
         fetchCategoryThumbnails().then(setCategoryThumbs);
       } catch (error) {
         console.error('Failed to load home data:', error);
-      } finally {
-        setLoading(false);
       }
     };
     loadHomeData();
   }, []);
+
+  // Best Sellers — paginated, 8 per page
+  useEffect(() => {
+    setBsLoading(true);
+    fetchProducts({ page: bsPage, limit: 8 })
+      .then(res => {
+        const transformed = res.data.map(transformStockItemToProduct);
+        setBestSellers(transformed);
+        setBsTotalPages(res.pagination.totalPages);
+
+        const masterids = res.data.map(i => i.masterid).filter(Boolean) as string[];
+        fetchThumbnails(masterids).then(thumbs => {
+          setBestSellers(prev => prev.map(p => (p.masterid && thumbs[p.masterid] ? { ...p, image: thumbs[p.masterid] } : p)));
+        });
+      })
+      .catch(error => console.error('Failed to load best sellers:', error))
+      .finally(() => setBsLoading(false));
+  }, [bsPage]);
+
+  const handleBsPageChange = (p: number) => {
+    if (p < 1 || p > bsTotalPages || p === bsPage) return;
+    setBsPage(p);
+  };
+
+  // New Arrivals — paginated, 8 per page. Offset by one API page so it shows
+  // items *after* the Best Sellers first page (preserves the old "after best
+  // sellers" ordering) instead of duplicating them.
+  useEffect(() => {
+    setNaLoading(true);
+    fetchProducts({ page: naPage + 1, limit: 8 })
+      .then(res => {
+        const transformed = res.data.map(transformStockItemToProduct);
+        setNewArrivals(transformed);
+        setNaTotalPages(Math.max(1, res.pagination.totalPages - 1));
+
+        const masterids = res.data.map(i => i.masterid).filter(Boolean) as string[];
+        fetchThumbnails(masterids).then(thumbs => {
+          setNewArrivals(prev => prev.map(p => (p.masterid && thumbs[p.masterid] ? { ...p, image: thumbs[p.masterid] } : p)));
+        });
+      })
+      .catch(error => console.error('Failed to load new arrivals:', error))
+      .finally(() => setNaLoading(false));
+  }, [naPage]);
+
+  const handleNaPageChange = (p: number) => {
+    if (p < 1 || p > naTotalPages || p === naPage) return;
+    setNaPage(p);
+  };
 
   // Drill-down logic for categories
   useEffect(() => {
@@ -151,91 +136,8 @@ export default function Home() {
     });
   }, [drillBrand]);
 
-  const b = BANNERS[bannerIdx];
-  const showCta = !b.categoryKey || allCategories.includes(b.categoryKey);
-
   return (
     <div className="pb-1 md:pb-2">
-
-      {/* ═══════════ 1. HERO BANNER ═══════════ */}
-      <div className="px-3 sm:px-4 pt-3 max-w-7xl mx-auto">
-        <div
-          className="relative rounded-2xl overflow-hidden transition-colors duration-500"
-          style={{ background: b.bg, minHeight: 156 }}
-        >
-          <div className="flex items-center px-5 py-6 sm:px-8 sm:py-8 md:px-10 gap-4 md:gap-8">
-            {/* Text */}
-            <div className="flex-1 min-w-0">
-              <h2 className="text-xl sm:text-2xl md:text-3xl font-extrabold leading-tight mb-1.5"
-                style={{ color: b.textColor }}>
-                {b.title}
-              </h2>
-              <p className="text-xs sm:text-sm font-medium mb-4 line-clamp-2"
-                style={{ color: b.subColor, maxWidth: '38ch' }}>
-                {b.sub}
-              </p>
-              {showCta && (
-                <Link to={b.link}
-                  className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-extrabold transition-all hover:opacity-90 active:scale-95"
-                  style={{ background: 'white', color: '#1C1C1C', boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}>
-                  {b.cta} <ArrowRight size={14} />
-                </Link>
-              )}
-            </div>
-            {/* Emoji illustration */}
-            <div className="flex-shrink-0 flex items-center justify-center w-20 sm:w-28 md:w-36">
-              <span className="text-6xl sm:text-7xl md:text-[96px] select-none drop-shadow-lg leading-none block">
-                {b.emoji}
-              </span>
-            </div>
-          </div>
-
-          {/* Dots */}
-          <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
-            {BANNERS.map((_, i) => (
-              <button key={i} onClick={() => setBannerIdx(i)}
-                className="rounded-full transition-all duration-300"
-                style={{
-                  width: i === bannerIdx ? 16 : 5,
-                  height: 5,
-                  background: i === bannerIdx ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.4)',
-                }} />
-            ))}
-          </div>
-
-          {/* Arrows — desktop only */}
-          <button onClick={() => setBannerIdx(i => (i - 1 + BANNERS.length) % BANNERS.length)}
-            className="hidden md:flex absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full items-center justify-center z-20 bg-white/80 hover:bg-white transition-all">
-            <ChevronLeft size={16} strokeWidth={2.5} />
-          </button>
-          <button onClick={() => setBannerIdx(i => (i + 1) % BANNERS.length)}
-            className="hidden md:flex absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full items-center justify-center z-20 bg-white/80 hover:bg-white transition-all">
-            <ChevronRight size={16} strokeWidth={2.5} />
-          </button>
-        </div>
-      </div>
-
-      {/* ═══════════ 2. PERKS STRIP ═══════════ */}
-      <div className="px-3 sm:px-4 pt-3 max-w-7xl mx-auto">
-        <div className="bg-white rounded-xl overflow-x-auto scrollbar-hide" style={{ border: '1px solid #E8E8E8' }}>
-          <div className="flex min-w-max md:min-w-0" style={{ borderColor: '#F2F2F2' }}>
-            {PERKS.map((p, i) => (
-              <div key={p.title}
-                className="flex items-center gap-2 px-4 py-3 flex-shrink-0"
-                style={{ borderLeft: i > 0 ? '1px solid #F2F2F2' : 'none' }}>
-                <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-                  style={{ background: '#EFF7EF', color: '#0C831F' }}>
-                  {p.icon}
-                </div>
-                <div>
-                  <p className="text-[11px] font-bold leading-tight text-gray-900">{p.title}</p>
-                  <p className="text-[10px] leading-tight" style={{ color: '#9E9E9E' }}>{p.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
 
       {/* ═══════════ 3. SHOP BY BRAND / CATEGORY ═══════════ */}
       <div className="px-3 sm:px-4 pt-3 max-w-7xl mx-auto">
@@ -267,7 +169,7 @@ export default function Home() {
               </button>
             ) : (
               <Link
-                to="/products"
+                to={shopTab === 'brand' ? '/brands' : '/categories'}
                 className="flex items-center gap-1 text-[11px] font-bold hover:gap-1.5 transition-all flex-shrink-0"
                 style={{ color: '#0C831F' }}>
                 See all <ArrowRight size={11} />
@@ -283,12 +185,9 @@ export default function Home() {
             {shopTab === 'brand'
               /* Brand grid: clicking a brand filters the category tab */
               ? dynamicBrands.map((b, i) => (
-                  <button
+                  <Link
                     key={b}
-                    onClick={() => {
-                      setDrillBrand(b);
-                      setShopTab('category');
-                    }}
+                    to={`/categories?brand=${encodeURIComponent(b)}`}
                     className="flex flex-col items-center gap-1.5 py-2.5 px-1.5 rounded-xl transition-all hover:-translate-y-0.5 hover:shadow-sm group"
                     style={{ width: 80, background: getColor(i), minHeight: 80 }}>
                     {brandThumbs[b] ? (
@@ -297,7 +196,7 @@ export default function Home() {
                       <span className="text-2xl group-hover:scale-110 transition-transform duration-200 leading-none flex-shrink-0">{getBrandEmoji(b)}</span>
                     )}
                     <span className="text-[9px] font-bold text-center leading-tight text-gray-800 w-full" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{b}</span>
-                  </button>
+                  </Link>
                 ))
               /* Category grid: clicking a category navigates to products */
               : dynamicCategories.map((cat, i) => (
@@ -324,8 +223,8 @@ export default function Home() {
         <div className="bg-white rounded-2xl p-4" style={{ border: '1px solid #E8E8E8' }}>
           <SectionHeader title="Best Sellers" badge="🔥 HOT" link="/products" />
           <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1 snap-x md:grid md:grid-cols-4 md:overflow-visible md:gap-4">
-            {loading ? (
-              [...Array(4)].map((_, i) => (
+            {bsLoading ? (
+              [...Array(8)].map((_, i) => (
                 <div key={i} className="animate-pulse rounded-xl bg-gray-100 flex-shrink-0 w-[44vw] sm:w-[38vw] md:w-auto" style={{ height: 260 }}></div>
               ))
             ) : (
@@ -336,38 +235,39 @@ export default function Home() {
               ))
             )}
           </div>
-        </div>
-      </div>
 
-      {/* ═══════════ 5. BULK ORDER BANNER ═══════════ */}
-      <div className="px-3 sm:px-4 pt-3 max-w-7xl mx-auto">
-        <div className="rounded-2xl overflow-hidden" style={{ background: '#1C1C1C' }}>
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 px-5 py-6 md:px-8 md:py-7">
-            <div>
-              <span className="inline-block text-[9px] font-extrabold uppercase tracking-widest px-2.5 py-1 rounded-md mb-2"
-                style={{ background: 'rgba(248,196,32,0.15)', color: '#F8C420' }}>
-                Bulk Order Benefits
-              </span>
-              <h3 className="text-lg md:text-xl font-extrabold text-white mb-1">
-                Wholesale & Institutional Orders
-              </h3>
-              <p className="text-xs md:text-sm font-medium" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                Special pricing for schools, offices, and bulk buyers. Contact us for a custom quote.
-              </p>
+          {/* Pagination */}
+          {!bsLoading && bsTotalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 mt-4">
+              <button disabled={bsPage === 1} onClick={() => handleBsPageChange(bsPage - 1)}
+                className="p-2 rounded-lg bg-white border border-gray-200 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50">
+                <ChevronLeft size={18} />
+              </button>
+              <div className="flex items-center gap-1">
+                {[...Array(Math.min(5, bsTotalPages))].map((_, i) => {
+                  let pageNum = bsPage;
+                  if (bsPage <= 3)                    pageNum = i + 1;
+                  else if (bsPage >= bsTotalPages - 2) pageNum = bsTotalPages - 4 + i;
+                  else                                 pageNum = bsPage - 2 + i;
+                  if (pageNum <= 0 || pageNum > bsTotalPages) return null;
+                  return (
+                    <button key={pageNum} onClick={() => handleBsPageChange(pageNum)}
+                      className={`w-9 h-9 rounded-lg font-bold text-sm transition-all ${
+                        bsPage === pageNum
+                          ? 'bg-green-700 text-white'
+                          : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                      }`}>
+                      {pageNum}
+                    </button>
+                  );
+                })}
+              </div>
+              <button disabled={bsPage === bsTotalPages} onClick={() => handleBsPageChange(bsPage + 1)}
+                className="p-2 rounded-lg bg-white border border-gray-200 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50">
+                <ChevronRight size={18} />
+              </button>
             </div>
-            <div className="flex gap-2.5 flex-shrink-0">
-              <Link to="/products"
-                className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all hover:opacity-90"
-                style={{ background: '#F8C420', color: '#1C1C1C' }}>
-                <Zap size={13} /> Shop Bulk
-              </Link>
-              <Link to="/products"
-                className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap"
-                style={{ background: 'rgba(255,255,255,0.08)', color: 'white', border: '1px solid rgba(255,255,255,0.12)' }}>
-                Learn More <ArrowRight size={12} />
-              </Link>
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -376,8 +276,8 @@ export default function Home() {
         <div className="bg-white rounded-2xl p-4" style={{ border: '1px solid #E8E8E8' }}>
           <SectionHeader title="New Arrivals" badge="✨ NEW" link="/products" />
           <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1 snap-x md:grid md:grid-cols-4 md:overflow-visible md:gap-4">
-            {loading ? (
-              [...Array(4)].map((_, i) => (
+            {naLoading ? (
+              [...Array(8)].map((_, i) => (
                 <div key={i} className="animate-pulse rounded-xl bg-gray-100 flex-shrink-0 w-[44vw] sm:w-[38vw] md:w-auto" style={{ height: 260 }}></div>
               ))
             ) : (
@@ -388,50 +288,43 @@ export default function Home() {
               ))
             )}
           </div>
+
+          {/* Pagination */}
+          {!naLoading && naTotalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 mt-4">
+              <button disabled={naPage === 1} onClick={() => handleNaPageChange(naPage - 1)}
+                className="p-2 rounded-lg bg-white border border-gray-200 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50">
+                <ChevronLeft size={18} />
+              </button>
+              <div className="flex items-center gap-1">
+                {[...Array(Math.min(5, naTotalPages))].map((_, i) => {
+                  let pageNum = naPage;
+                  if (naPage <= 3)                    pageNum = i + 1;
+                  else if (naPage >= naTotalPages - 2) pageNum = naTotalPages - 4 + i;
+                  else                                 pageNum = naPage - 2 + i;
+                  if (pageNum <= 0 || pageNum > naTotalPages) return null;
+                  return (
+                    <button key={pageNum} onClick={() => handleNaPageChange(pageNum)}
+                      className={`w-9 h-9 rounded-lg font-bold text-sm transition-all ${
+                        naPage === pageNum
+                          ? 'bg-green-700 text-white'
+                          : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                      }`}>
+                      {pageNum}
+                    </button>
+                  );
+                })}
+              </div>
+              <button disabled={naPage === naTotalPages} onClick={() => handleNaPageChange(naPage + 1)}
+                className="p-2 rounded-lg bg-white border border-gray-200 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50">
+                <ChevronRight size={18} />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
       {showSheet && <PostLoginSheet onClose={() => setShowSheet(false)} />}
-
-      {/* ═══════════ 7. WHY PPW ═══════════ */}
-      <div className="px-3 sm:px-4 pt-4 pb-0 max-w-7xl mx-auto">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {[
-            { 
-              icon: <Building2 size={18} />, 
-              color: '#0C831F', 
-              label: 'Direct Wholesale', 
-              desc: 'Manufacturer direct sourcing for max savings' 
-            },
-            { 
-              icon: <PackageCheck size={18} />, 
-              color: '#F8C420', 
-              label: 'Verified Quality', 
-              desc: 'Every item manually inspected for standards' 
-            },
-            { 
-              icon: <Headphones size={18} />, 
-              color: '#1C1C1C', 
-              label: 'Priority Support', 
-              desc: 'Dedicated assistance for business accounts' 
-            },
-          ].map((v, i) => (
-            <div key={i} className="bg-white rounded-xl p-3.5 shadow-sm hover:shadow-md transition-all active:scale-[0.98]" 
-              style={{ border: '1px solid #E8E8E8' }}>
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" 
-                  style={{ background: `${v.color}15`, color: v.color }}>
-                  {v.icon}
-                </div>
-                <div className="min-w-0">
-                  <h4 className="text-[12px] font-extrabold text-[#1C1C1C] leading-none mb-1">{v.label}</h4>
-                  <p className="text-[10px] font-medium leading-tight text-[#666] truncate">{v.desc}</p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
 
     </div>
   );
