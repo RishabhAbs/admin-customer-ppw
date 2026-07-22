@@ -1,15 +1,23 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { ShoppingCart, User, ChevronDown, Package, LogOut } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import SearchAutocomplete from './SearchAutocomplete';
+import ShareMenu from './ShareMenu';
 
 export default function Navbar() {
   const { totalItems } = useCart();
   const { user, logout, isLoggedIn } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [userDrop, setUserDrop] = useState(false);
+
+  // Share the page the user is currently on. Reading location keeps this fresh
+  // as they navigate (the layout-level Navbar stays mounted across routes).
+  const shareUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}${location.pathname}${location.search}`
+    : '';
 
   return (
     <header className="sticky top-0 z-50 bg-white" style={{ boxShadow: '0 1px 0 #E8E8E8, 0 2px 8px rgba(0,0,0,0.06)' }}>
@@ -18,9 +26,12 @@ export default function Navbar() {
       <div className="px-4 md:px-6 lg:px-8 flex items-center gap-3 md:gap-4" style={{ height: 64 }}>
 
         {/* Logo */}
-        <Link to="/" className="flex-shrink-0 flex flex-row items-center gap-2 hover:opacity-90 transition-opacity" style={{ width: 'max-content' }}>
-          <img src="/ppw-logo.png" alt="PPW Store" className="h-[48px] md:h-[54px] w-auto object-contain" />
-          <span className="text-[11px] md:text-[13px] font-extrabold tracking-widest uppercase leading-tight" style={{ color: '#b8804a' }}>Purbanchal Papers &amp; Works</span>
+        <Link to="/" className="flex flex-row items-center gap-2 hover:opacity-90 transition-opacity min-w-0">
+          <img src="/ppw-logo.png" alt="PPW Store" className="h-[48px] md:h-[54px] w-auto object-contain flex-shrink-0" />
+          <span className="flex flex-col leading-tight min-w-0">
+            <span className="text-[11px] md:text-[13px] font-extrabold tracking-widest uppercase truncate" style={{ color: '#b8804a' }}>Purbanchal Papers &amp; Works</span>
+            <span className="text-[11px] md:text-[13px] font-extrabold tracking-widest uppercase truncate" style={{ color: '#b8804a' }}>Since 1992</span>
+          </span>
         </Link>
 
 
@@ -30,6 +41,14 @@ export default function Navbar() {
 
         {/* Right actions */}
         <div className="flex items-center gap-1.5 md:gap-2 ml-auto md:ml-0 flex-shrink-0">
+
+          {/* Share current page */}
+          <ShareMenu
+            title="Purbanchal Papers & Works"
+            text="Check out Purbanchal Papers & Works — quality stationery online"
+            url={shareUrl}
+            label="Share"
+          />
 
           {/* Login / User */}
           {isLoggedIn ? (

@@ -10,6 +10,15 @@
   box-sizing: border-box;
 }
 
+/* Never let a stray wide element create a horizontal scroll / side-shift —
+   this kept the native WebView (and mobile web) from drifting sideways. */
+html,
+body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
 body {
   font-family: var(--font-sans);
   background: #F2F2F2;
@@ -21,7 +30,9 @@ body {
 
 #root {
   width: 100%;
+  max-width: 100%;
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
 /* ── Scrollbar ── */

@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Share2, Check } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 
 export interface Product {
@@ -23,6 +25,35 @@ export default function ProductCard({ product }: { product: Product }) {
   const { addItem, isInCart, getQty, updateQty } = useCart();
   const inCart = isInCart(product.id);
   const qty    = getQty(product.id);
+  const [copied, setCopied] = useState(false);
+
+  // Share this product. Native sheet on mobile; copy the link on desktop (a
+  // full popover would be clipped by the card's overflow-hidden). preventDefault
+  // stops the wrapping <Link> from navigating.
+  const handleShare = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const url = `${window.location.origin}/products/${product.id}`;
+    const canNativeShare =
+      typeof navigator !== 'undefined' &&
+      !!navigator.share &&
+      /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (canNativeShare) {
+      try {
+        await navigator.share({ title: product.name, text: `Check out ${product.name} on Purbanchal Papers & Works`, url });
+        return;
+      } catch {
+        // Cancelled — fall through to clipboard.
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    } catch {
+      // Clipboard blocked — nothing more to do.
+    }
+  };
 
   return (
     <Link to={`/products/${product.id}`} className="block group">
@@ -47,6 +78,17 @@ export default function ProductCard({ product }: { product: Product }) {
             </span>
           )}
 
+
+          {/* Share */}
+          <button
+            onClick={handleShare}
+            aria-label="Share this product"
+            title={copied ? 'Link copied!' : 'Share'}
+            className="absolute top-2 right-2 w-8 h-8 rounded-full flex items-center justify-center bg-white/90 backdrop-blur-sm shadow-sm hover:bg-white transition-colors z-10"
+            style={{ border: '1px solid #E8E8E8' }}
+          >
+            {copied ? <Check size={14} style={{ color: '#0C831F' }} /> : <Share2 size={14} style={{ color: '#0C831F' }} />}
+          </button>
 
           {/* Out of stock overlay */}
           {product.inStock === false && (
@@ -75,6 +117,13 @@ export default function ProductCard({ product }: { product: Product }) {
             {product.name}
           </h3>
 
+          {/* Item code */}
+          {product.barcode && (
+            <p className="text-[10px] font-semibold mb-1" style={{ color: '#9E9E9E' }}>
+              PPW Item Code: <span className="font-bold text-gray-700">{product.barcode}</span>
+            </p>
+          )}
+
           {/* Unit */}
           {product.unit && (
             <p className="text-[11px] mb-2" style={{ color: '#9E9E9E' }}>{product.unit}</p>
@@ -82,6 +131,7 @@ export default function ProductCard({ product }: { product: Product }) {
 
           {/* Price */}
           <div className="flex items-baseline gap-1.5 mt-auto mb-2.5">
+            <span className="text-[11px] font-bold text-gray-500">MRP</span>
             <span className="text-sm font-extrabold text-gray-900">₹{product.price}</span>
           </div>
 

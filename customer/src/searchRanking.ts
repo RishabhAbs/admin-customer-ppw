@@ -11,6 +11,9 @@ export interface IndexItem {
   price: number;
   mrp: number;
   nameLower: string;
+  // The customer-facing "PPW Item Code" (ats_barcode). Enables item-code search
+  // in the dropdown; empty string when the product has no code.
+  itemCode: string;
 }
 
 // Currency / filler words that shouldn't constrain the match ("10 rupee pens"
@@ -156,9 +159,46 @@ function fieldMatch(item: IndexItem, token: string): number {
   return 0;
 }
 
+// Item codes / barcodes are matched on a stripped, case-folded form so that a
+// query like "ppw-12 34" still hits the stored code "PPW1234".
+function normCode(s: string): string {
+  return (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+// Score an item's code against the (already normalized) query code. 0 = no
+// match. Exact matches dominate everything else so the coded item floats to the
+// very top; prefix/substring hits need a few chars to avoid noise.
+function codeMatchScore(codeLower: string, codeQuery: string): number {
+  if (!codeLower || !codeQuery) return 0;
+  if (codeLower === codeQuery) return 1000;                            // exact item code
+  if (codeQuery.length >= 3 && codeLower.startsWith(codeQuery)) return 200;
+  if (codeQuery.length >= 4 && codeLower.includes(codeQuery)) return 60;
+  return 0;
+}
+
+// Item codes/barcodes practically always contain a digit. Gating the code pass
+// on a digit keeps ordinary word searches ("pen", "art") from accidentally
+// matching alphabetic prefixes of some SKU.
+function codeQueryOf(query: string): string {
+  const c = normCode(query);
+  return /\d/.test(c) ? c : '';
+}
+
+// Does the query exactly name a known item code? Used by the search box to skip
+// spell-correction on a code (which would otherwise mangle it into a word).
+export function isKnownItemCode(items: IndexItem[], query: string): boolean {
+  const c = codeQueryOf(query);
+  if (!c) return false;
+  for (const it of items) {
+    if (normCode(it.itemCode) === c) return true;
+  }
+  return false;
+}
+
 export function searchIndexQuery(items: IndexItem[], query: string, limit = 8): IndexItem[] {
   const { tokens, priceTokens, raw } = normalize(query);
-  if (!tokens.length && !priceTokens.length) return [];
+  const codeQuery = codeQueryOf(query);
+  if (!tokens.length && !priceTokens.length && !codeQuery) return [];
 
   const scored: { item: IndexItem; score: number }[] = [];
 
@@ -176,6 +216,11 @@ export function searchIndexQuery(items: IndexItem[], query: string, limit = 8): 
     let score = 0;
     let allTextMatched = true;
 
+    // Item-code match is independent of the text tokens (the code rarely appears
+    // in the product name), so score it up front and keep code hits even when the
+    // text/price passes below reject the item.
+    const codeScore = codeMatchScore(normCode(item.itemCode), codeQuery);
+
     if (multiTerm && raw && item.nameLower.startsWith(raw)) score += 30;
 
     for (const t of tokens) {
@@ -186,7 +231,10 @@ export function searchIndexQuery(items: IndexItem[], query: string, limit = 8): 
       }
       score += m;
     }
-    if (!allTextMatched) continue;
+    if (!allTextMatched) {
+      if (codeScore > 0) scored.push({ item, score: codeScore });
+      continue;
+    }
 
     // Demote accessories the user didn't ask for so "pencil" surfaces pencils
     // above "pencil box" / "pencil pouch" / "pencil battery".
@@ -211,7 +259,10 @@ export function searchIndexQuery(items: IndexItem[], query: string, limit = 8): 
         priceMatched = true;
       }
     }
-    if (tokens.length === 0 && !priceMatched) continue;
+    if (tokens.length === 0 && !priceMatched && codeScore === 0) continue;
+
+    // An exact/partial item-code hit outranks a coincidental name/price match.
+    score += codeScore;
 
     // Tie-break: shorter (more specific) names edge ahead.
     score += Math.max(0, 5 - item.name.length / 20);

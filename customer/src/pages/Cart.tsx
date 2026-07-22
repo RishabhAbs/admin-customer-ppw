@@ -1,16 +1,54 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Trash2, ArrowRight, Truck } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import RelatedItems from '../components/RelatedItems';
 import PreviouslyBought from '../components/PreviouslyBought';
+import ShareMenu from '../components/ShareMenu';
 import { fetchSingleProduct } from '../api';
 
 export default function Cart() {
-  const { items, removeItem, updateQty, total } = useCart();
+  const { items, addItem, removeItem, updateQty, total } = useCart();
   const { isLoggedIn } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Importing a shared cart: a "…/cart?shared=<id>:<qty>_<id>:<qty>" link adds
+  // each listed product to the opener's cart, then strips the param from the URL.
+  const [importing, setImporting] = useState(() => !!searchParams.get('shared'));
+  const [importMsg, setImportMsg] = useState<string | null>(null);
+  useEffect(() => {
+    const shared = searchParams.get('shared');
+    if (!shared) return;
+    const pairs = shared.split('_').map(s => s.split(':')).filter(a => a.length === 2);
+    const clearParam = () => { searchParams.delete('shared'); setSearchParams(searchParams, { replace: true }); };
+    if (!pairs.length) { clearParam(); setImporting(false); return; }
+
+    let cancelled = false;
+    (async () => {
+      let added = 0;
+      for (const [idStr, qStr] of pairs) {
+        const pid = Number(idStr);
+        const q = Math.max(1, Number(qStr) || 1);
+        if (!pid) continue;
+        const p = await fetchSingleProduct(pid);
+        if (cancelled) return;
+        if (p) {
+          addItem({ productId: pid, masterid: p.masterid, name: p.name, price: p.price, mrp: p.mrp, quantity: q, unit: p.unit ?? 'pcs' });
+          added++;
+        }
+      }
+      if (cancelled) return;
+      setImportMsg(added ? `Added ${added} shared item${added > 1 ? 's' : ''} to your cart` : 'Those shared items are no longer available');
+      clearParam();
+      setImporting(false);
+      setTimeout(() => setImportMsg(null), 4000);
+    })();
+    return () => { cancelled = true; };
+    // Run once on mount for the incoming shared link.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Derive a category from the first cart item so we can suggest similar items.
   // Cart items don't store category, so we look the product up by id.
@@ -28,6 +66,21 @@ export default function Cart() {
   const delivery      = total >= 499 ? 0 : 40;
   const finalTotal    = total + delivery;
 
+  // A shareable link that rebuilds this cart for whoever opens it, plus a
+  // human-readable summary for the WhatsApp/Email message body.
+  const origin   = typeof window !== 'undefined' ? window.location.origin : '';
+  const shareUrl = `${origin}/cart?shared=${items.map(i => `${i.productId}:${i.quantity}`).join('_')}`;
+  const shareText =
+    `My cart on Purbanchal Papers & Works (${items.length} item${items.length > 1 ? 's' : ''}, ₹${total.toLocaleString()}):\n` +
+    items.map(i => `• ${i.name} × ${i.quantity}`).join('\n');
+
+  if (importing) return (
+    <div className="flex flex-col items-center justify-center py-40">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-700 mb-4"></div>
+      <p className="text-sm font-medium text-gray-500">Loading shared cart…</p>
+    </div>
+  );
+
   if (items.length === 0) return (
     <div className="max-w-md mx-auto px-4 py-24 text-center">
       <span className="text-7xl block mb-5">🛒</span>
@@ -43,8 +96,20 @@ export default function Cart() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-5">
-      <h1 className="text-xl font-bold mb-1" style={{ color: '#292524' }}>Shopping Cart</h1>
-      <p className="text-sm mb-5" style={{ color: '#78716c' }}>{items.length} item{items.length > 1 ? 's' : ''} in your cart</p>
+      <div className="flex items-start justify-between gap-3 mb-5">
+        <div>
+          <h1 className="text-xl font-bold mb-1" style={{ color: '#292524' }}>Shopping Cart</h1>
+          <p className="text-sm" style={{ color: '#78716c' }}>{items.length} item{items.length > 1 ? 's' : ''} in your cart</p>
+        </div>
+        <ShareMenu title="My Purbanchal Papers & Works cart" text={shareText} url={shareUrl} label="Share cart" />
+      </div>
+
+      {importMsg && (
+        <div className="flex items-center gap-2 px-4 py-3 rounded-2xl mb-4 text-sm font-semibold"
+          style={{ background: '#EFF7EF', border: '1.5px solid rgba(12,131,31,0.2)', color: '#0C831F' }}>
+          ✓ {importMsg}
+        </div>
+      )}
 
       {total < 499 && (
         <div className="flex items-center gap-2 px-4 py-3 rounded-2xl mb-4 text-sm font-medium"

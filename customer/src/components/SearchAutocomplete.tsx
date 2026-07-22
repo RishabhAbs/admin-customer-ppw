@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Search } from 'lucide-react';
-import { loadSearchIndex, searchIndexQuery, suggestCorrection, type IndexItem } from '../searchIndex';
+import { loadSearchIndex, searchIndexQuery, suggestCorrection, isKnownItemCode, type IndexItem } from '../searchIndex';
 
 // Search input + instant suggestion dropdown. All matching happens client-side
 // against the cached catalog index (see searchIndex.ts), so typing never hits
@@ -72,8 +72,11 @@ export default function SearchAutocomplete({ variant = 'desktop' }: { variant?: 
     setOpen(false);
     // Autocorrect typos before hitting the backend (which only does a plain
     // substring match). suggestCorrection returns null when the term is already
-    // spelled fine, so correctly-typed queries pass through untouched.
-    const corrected = idxRef.current.length ? suggestCorrection(idxRef.current, q) : null;
+    // spelled fine, so correctly-typed queries pass through untouched. Skip
+    // correction for an item code, otherwise a code like "PPW1234" would be
+    // "corrected" into the nearest catalog word.
+    const isCode = idxRef.current.length ? isKnownItemCode(idxRef.current, q) : false;
+    const corrected = !isCode && idxRef.current.length ? suggestCorrection(idxRef.current, q) : null;
     navigate(`/products?search=${encodeURIComponent(corrected || q)}`);
   };
 

@@ -4,6 +4,7 @@ import { Star, ShoppingCart, Zap, ChevronRight, ChevronLeft, Minus, Plus, Maximi
 import { useCart } from '../context/CartContext';
 import { type Product } from '../components/ProductCard';
 import RelatedItems from '../components/RelatedItems';
+import ShareMenu from '../components/ShareMenu';
 import { fetchSingleProduct, fetchProductDetail, type FullItemDetail } from '../api';
 
 export default function ProductDetail() {
@@ -89,12 +90,14 @@ export default function ProductDetail() {
     ...videos.map(vid => ({ id: vid.id, type: 'video' as const, url: toUrl(vid.video_url) })),
   ];
   const description = extraData?.details?.description || 'No description available for this product.';
-  const highlights = [
-    `Brand: ${brand || 'General'}`,
-    `Category: ${product.category}`,
-    `Unit: ${product.unit}`,
-    `In Stock: ${product.inStock ? 'Yes' : 'No'}`,
-    `Trusted Quality`
+  // `to` makes a highlight a clickable filter link (Brand / Category jump to the
+  // product list pre-filtered on that value).
+  const highlights: { label: string; to?: string }[] = [
+    { label: `Brand: ${brand || 'General'}`, to: brand ? `/products?brand=${encodeURIComponent(brand)}` : undefined },
+    { label: `Category: ${product.category}`, to: product.category ? `/products?category=${encodeURIComponent(product.category)}` : undefined },
+    { label: `Unit: ${product.unit}` },
+    { label: `In Stock: ${product.inStock ? 'Yes' : 'No'}` },
+    { label: `Trusted Quality` },
   ];
 
   return (
@@ -118,7 +121,14 @@ export default function ProductDetail() {
 
           {/* Info Section */}
           <div className="flex-1 min-w-0">
-            <h1 className="text-2xl font-extrabold leading-tight mb-2 text-gray-900">{product.name}</h1>
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <h1 className="text-2xl font-extrabold leading-tight text-gray-900">{product.name}</h1>
+              <ShareMenu
+                title={product.name}
+                text={`Check out ${product.name} on Purbanchal Papers & Works`}
+                url={typeof window !== 'undefined' ? window.location.href : ''}
+              />
+            </div>
             {product.barcode && (
               <p className="text-sm font-bold mb-4 text-gray-600">
                 PPW Item Code: <span className="font-extrabold text-gray-900">{product.barcode}</span>
@@ -206,10 +216,24 @@ export default function ProductDetail() {
             {/* Highlights */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {highlights.map((h, i) => (
-                <div key={i} className="flex items-center gap-2 text-xs font-medium text-gray-600 bg-gray-50 px-3 py-2 rounded-lg border border-gray-100">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-700" />
-                  {h}
-                </div>
+                h.to ? (
+                  <button
+                    key={i}
+                    onClick={() => navigate(h.to!)}
+                    className="flex items-center justify-between gap-2 text-xs font-semibold text-gray-700 bg-gray-50 px-3 py-2 rounded-lg border border-gray-100 hover:border-green-600 hover:bg-green-50 hover:text-green-700 transition-colors text-left"
+                  >
+                    <span className="flex items-center gap-2 min-w-0">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-700 flex-shrink-0" />
+                      <span className="truncate">{h.label}</span>
+                    </span>
+                    <ChevronRight size={13} className="flex-shrink-0" />
+                  </button>
+                ) : (
+                  <div key={i} className="flex items-center gap-2 text-xs font-medium text-gray-600 bg-gray-50 px-3 py-2 rounded-lg border border-gray-100">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-700" />
+                    {h.label}
+                  </div>
+                )
               ))}
             </div>
           </div>
@@ -241,7 +265,13 @@ export default function ProductDetail() {
                     <span className="w-5 h-5 rounded-full bg-green-50 flex items-center justify-center text-green-700 flex-shrink-0">
                       <ChevronRight size={14} />
                     </span>
-                    {h}
+                    {h.to ? (
+                      <button onClick={() => navigate(h.to!)} className="text-left hover:text-green-700 hover:underline transition-colors">
+                        {h.label}
+                      </button>
+                    ) : (
+                      h.label
+                    )}
                   </li>
                 ))}
               </ul>

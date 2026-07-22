@@ -14,14 +14,14 @@ import { fetchProducts, transformStockItemToProduct } from './api';
 import type { IndexItem } from './searchRanking';
 
 // Re-export so existing importers can keep pulling both from './searchIndex'.
-export { searchIndexQuery, suggestCorrection } from './searchRanking';
+export { searchIndexQuery, suggestCorrection, isKnownItemCode } from './searchRanking';
 export type { IndexItem } from './searchRanking';
 
 // Bump the version suffix whenever the shape of IndexItem changes so old caches
 // are ignored rather than mis-parsed. Also bumped to force a rebuild when a stale
 // cache (e.g. one built before newly-synced catalog rows existed) would otherwise
 // linger for the full TTL.
-const CACHE_KEY = 'ppw_search_index_v2';
+const CACHE_KEY = 'ppw_search_index_v3';
 const TTL_MS = 12 * 60 * 60 * 1000; // 12h
 
 let memIndex: IndexItem[] | null = null;
@@ -68,6 +68,7 @@ async function build(): Promise<IndexItem[]> {
       price: p.price,
       mrp: p.mrp,
       nameLower: (p.name || '').toLowerCase(),
+      itemCode: p.barcode || '',
     };
   });
   memIndex = items;

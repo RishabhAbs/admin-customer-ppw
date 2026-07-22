@@ -46,10 +46,6 @@ export default function Home() {
   const [bsPage, setBsPage] = useState(1);
   const [bsTotalPages, setBsTotalPages] = useState(1);
   const [bsLoading, setBsLoading] = useState(true);
-  const [newArrivals, setNewArrivals] = useState<Product[]>([]);
-  const [naPage, setNaPage] = useState(1);
-  const [naTotalPages, setNaTotalPages] = useState(1);
-  const [naLoading, setNaLoading] = useState(true);
   const [dynamicBrands, setDynamicBrands] = useState<string[]>([]);
   const [dynamicCategories, setDynamicCategories] = useState<string[]>([]);
   const [brandThumbs, setBrandThumbs] = useState<Record<string, string>>({});
@@ -102,31 +98,6 @@ export default function Home() {
   const handleBsPageChange = (p: number) => {
     if (p < 1 || p > bsTotalPages || p === bsPage) return;
     setBsPage(p);
-  };
-
-  // New Arrivals — paginated, 8 per page. Offset by one API page so it shows
-  // items *after* the Best Sellers first page (preserves the old "after best
-  // sellers" ordering) instead of duplicating them.
-  useEffect(() => {
-    setNaLoading(true);
-    fetchProducts({ page: naPage + 1, limit: 8 })
-      .then(res => {
-        const transformed = res.data.map(transformStockItemToProduct);
-        setNewArrivals(transformed);
-        setNaTotalPages(Math.max(1, res.pagination.totalPages - 1));
-
-        const masterids = res.data.map(i => i.masterid).filter(Boolean) as string[];
-        fetchThumbnails(masterids).then(thumbs => {
-          setNewArrivals(prev => prev.map(p => (p.masterid && thumbs[p.masterid] ? { ...p, image: thumbs[p.masterid] } : p)));
-        });
-      })
-      .catch(error => console.error('Failed to load new arrivals:', error))
-      .finally(() => setNaLoading(false));
-  }, [naPage]);
-
-  const handleNaPageChange = (p: number) => {
-    if (p < 1 || p > naTotalPages || p === naPage) return;
-    setNaPage(p);
   };
 
   // Drill-down logic for categories
@@ -222,14 +193,14 @@ export default function Home() {
       <div className="px-3 sm:px-4 pt-3 max-w-7xl mx-auto">
         <div className="bg-white rounded-2xl p-4" style={{ border: '1px solid #E8E8E8' }}>
           <SectionHeader title="Best Sellers" badge="🔥 HOT" link="/products" />
-          <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1 snap-x md:grid md:grid-cols-4 md:overflow-visible md:gap-4">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
             {bsLoading ? (
               [...Array(8)].map((_, i) => (
-                <div key={i} className="animate-pulse rounded-xl bg-gray-100 flex-shrink-0 w-[44vw] sm:w-[38vw] md:w-auto" style={{ height: 260 }}></div>
+                <div key={i} className="animate-pulse rounded-xl bg-gray-100" style={{ height: 260 }}></div>
               ))
             ) : (
               bestSellers.map(p => (
-                <div key={p.id} className="snap-start flex-shrink-0 w-[44vw] sm:w-[38vw] md:w-auto">
+                <div key={p.id}>
                   <ProductCard product={p} />
                 </div>
               ))
@@ -263,59 +234,6 @@ export default function Home() {
                 })}
               </div>
               <button disabled={bsPage === bsTotalPages} onClick={() => handleBsPageChange(bsPage + 1)}
-                className="p-2 rounded-lg bg-white border border-gray-200 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50">
-                <ChevronRight size={18} />
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ═══════════ 6. NEW ARRIVALS ═══════════ */}
-      <div className="px-3 sm:px-4 pt-3 max-w-7xl mx-auto">
-        <div className="bg-white rounded-2xl p-4" style={{ border: '1px solid #E8E8E8' }}>
-          <SectionHeader title="New Arrivals" badge="✨ NEW" link="/products" />
-          <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1 snap-x md:grid md:grid-cols-4 md:overflow-visible md:gap-4">
-            {naLoading ? (
-              [...Array(8)].map((_, i) => (
-                <div key={i} className="animate-pulse rounded-xl bg-gray-100 flex-shrink-0 w-[44vw] sm:w-[38vw] md:w-auto" style={{ height: 260 }}></div>
-              ))
-            ) : (
-              newArrivals.map(p => (
-                <div key={p.id} className="snap-start flex-shrink-0 w-[44vw] sm:w-[38vw] md:w-auto">
-                  <ProductCard product={p} />
-                </div>
-              ))
-            )}
-          </div>
-
-          {/* Pagination */}
-          {!naLoading && naTotalPages > 1 && (
-            <div className="flex items-center justify-center gap-2 mt-4">
-              <button disabled={naPage === 1} onClick={() => handleNaPageChange(naPage - 1)}
-                className="p-2 rounded-lg bg-white border border-gray-200 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50">
-                <ChevronLeft size={18} />
-              </button>
-              <div className="flex items-center gap-1">
-                {[...Array(Math.min(5, naTotalPages))].map((_, i) => {
-                  let pageNum = naPage;
-                  if (naPage <= 3)                    pageNum = i + 1;
-                  else if (naPage >= naTotalPages - 2) pageNum = naTotalPages - 4 + i;
-                  else                                 pageNum = naPage - 2 + i;
-                  if (pageNum <= 0 || pageNum > naTotalPages) return null;
-                  return (
-                    <button key={pageNum} onClick={() => handleNaPageChange(pageNum)}
-                      className={`w-9 h-9 rounded-lg font-bold text-sm transition-all ${
-                        naPage === pageNum
-                          ? 'bg-green-700 text-white'
-                          : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
-                      }`}>
-                      {pageNum}
-                    </button>
-                  );
-                })}
-              </div>
-              <button disabled={naPage === naTotalPages} onClick={() => handleNaPageChange(naPage + 1)}
                 className="p-2 rounded-lg bg-white border border-gray-200 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50">
                 <ChevronRight size={18} />
               </button>

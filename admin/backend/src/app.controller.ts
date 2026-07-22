@@ -978,11 +978,13 @@ export class AppController {
 
           const cleanName = this.cleanSql('stock.name');
           const cleanMasterId = this.cleanSql('stock.masterid');
+          const cleanBarcode = this.cleanSql('stock.ats_barcode');
           const cleanMrp = this.cleanSql('stock.default_mrp');
 
           query.andWhere(
             `(stock.name LIKE :${tKey}
               OR stock.masterid LIKE :${tKey}
+              OR stock.ats_barcode LIKE :${tKey}
               OR stock.default_mrp LIKE :${tKey}
               OR stock.group LIKE :${tKey}
               OR stock.category LIKE :${tKey}
@@ -991,6 +993,7 @@ export class AppController {
               OR stock.category LIKE :${sKey}
               OR ${cleanName} LIKE :${ctKey}
               OR ${cleanMasterId} LIKE :${ctKey}
+              OR ${cleanBarcode} LIKE :${ctKey}
               OR ${cleanMrp} LIKE :${ctKey}
              )`,
             termParams
